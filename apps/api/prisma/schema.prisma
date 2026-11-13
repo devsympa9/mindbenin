@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String    @id @default(cuid())
+  npi        String    @unique
+  firstName  String
+  lastName   String
+  birthDate  DateTime
+  birthPlace String
+  gender     String
+  phone      String?
+  photoSeed  String
+  verifiedAt DateTime  @default(now())
+  createdAt  DateTime  @default(now())
+  dossiers   Dossier[]
+}
+
+model Service {
+  id             String    @id @default(cuid())
+  slug           String    @unique
+  name           String
+  shortName      String
+  description    String
+  icon           String
+  officialPrice  Int
+  commission     Int
+  processingDays Int
+  pickupLocation String
+  requirements   String[]
+  fields         Json
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  dossiers       Dossier[]
+}
+
+model Dossier {
+  id             String        @id @default(cuid())
+  reference      String        @unique
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serviceId      String
+  service        Service       @relation(fields: [serviceId], references: [id])
+  status         DossierStatus @default(DEMANDE_ENVOYEE)
+  formData       Json
+  officialPrice  Int
+  commission     Int
+  totalAmount    Int
+  pickupLocation String
+  readyAt        DateTime?
+  manualOverride Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  events         DossierEvent[]
+  payment        Payment?
+
+  @@index([userId, createdAt])
+}
+
+enum DossierStatus {
+  DEMANDE_ENVOYEE
+  IDENTITE_VERIFIEE
+  EN_COURS_TRAITEMENT
+  PRET_A_RECUPERER
+  RECUPERE
+  ANNULE
+}
+
+model DossierEvent {
+  id        String        @id @default(cuid())
+  dossierId String
+  dossier   Dossier       @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+  status    DossierStatus
+  message   String
+  createdAt DateTime      @default(now())
+
+  @@index([dossierId])
+}
+
+model Payment {
+  id             String          @id @default(cuid())
+  dossierId      String          @unique
+  dossier        Dossier         @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+  provider       PaymentProvider
+  phone          String
+  amount         Int
+  status         PaymentStatus   @default(EN_ATTENTE)
+  receipt        String          @unique
+  transactionRef String          @unique
+  checkoutUrl    String?
+  fedapayId      String?         @unique
+  paidAt         DateTime?
+  createdAt      DateTime        @default(now())
+}
+
+enum PaymentProvider {
+  MTN_MOMO
+  MOOV_MONEY
+}
+
+enum PaymentStatus {
+  EN_ATTENTE
+  REUSSI
+  ECHOUE
+}

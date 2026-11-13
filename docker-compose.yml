@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: mindbenin-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mindbenin
+      POSTGRES_PASSWORD: mindbenin
+      POSTGRES_DB: mindbenin
+    ports:
+      - "5433:5432"
+    volumes:
+      - mindbenin_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mindbenin -d mindbenin"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mindbenin_pgdata:
