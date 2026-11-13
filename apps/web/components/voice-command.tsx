@@ -64,6 +64,80 @@ const COMMANDS = [
   },
 ] as const
 
+const FRENCH_NUMBER_WORDS: Record<string, number> = {
+  zero: 0,
+  un: 1,
+  une: 1,
+  deux: 2,
+  trois: 3,
+  quatre: 4,
+  cinq: 5,
+  six: 6,
+  sept: 7,
+  huit: 8,
+  neuf: 9,
+  dix: 10,
+  onze: 11,
+  douze: 12,
+  treize: 13,
+  quatorze: 14,
+  quinze: 15,
+  seize: 16,
+  dixsept: 17,
+  dixhuit: 18,
+  dixneuf: 19,
+  vingt: 20,
+  trente: 30,
+  quarante: 40,
+  cinquante: 50,
+  soixante: 60,
+  "quatre-vingt": 80,
+  "quatre-vingts": 80,
+  cent: 100,
+  mille: 1000,
+}
+
+function parseFrenchNumberWords(input: string): number | null {
+  const tokens = normalize(input)
+    .split(/\s+/)
+    .filter(Boolean)
+
+  let total = 0
+  let current = 0
+  let hasNumber = false
+
+  for (const token of tokens) {
+    if (FRENCH_NUMBER_WORDS[token] !== undefined) {
+      current += FRENCH_NUMBER_WORDS[token]
+      hasNumber = true
+      continue
+    }
+
+    if (token === "cent" || token === "cents" || token === "cent.") {
+      if (current === 0) current = 1
+      current *= 100
+      continue
+    }
+
+    if (token === "mille" || token === "milles") {
+      if (current === 0) current = 1
+      total += current * 1000
+      current = 0
+      continue
+    }
+
+    if (token === "million" || token === "millions") {
+      if (current === 0) current = 1
+      total += current * 1000000
+      current = 0
+      continue
+    }
+  }
+
+  total += current
+  return hasNumber ? total : null
+}
+
 function normalize(value: string): string {
   return value
     .toLowerCase()
@@ -116,9 +190,15 @@ function extractDetails(slug: string, text: string): Record<string, string> {
       /(?:num[eé]ro|compteur|facture)\s*(?:de\s*(?:facture|compteur))?\s*[:=]?\s*([0-9][0-9\s.,-]{4,})/i,
     )?.[1]?.replace(/[^0-9]/g, "")
 
-    const amountFromKeyword = text.match(
+    const amountDigitMatch = text.match(
       /(?:montant|a payer|payer|somme)\s*(?:de\s*la\s*facture)?\s*[:=]?\s*([0-9][0-9\s.,]*)/i,
     )?.[1]?.replace(/[^0-9]/g, "")
+
+    const amountKeywordIndex = normalize(text).search(/montant|a payer|payer|somme/)
+    const amountSegment =
+      amountKeywordIndex >= 0 ? text.slice(amountKeywordIndex) : text
+    const amountWordMatch = parseFrenchNumberWords(amountSegment)
+    const amountFromKeyword = amountDigitMatch || (amountWordMatch ? String(amountWordMatch) : undefined)
 
     const groups =
       text
@@ -191,6 +271,11 @@ export function VoiceCommand() {
   const [transcript, setTranscript] = useState("")
   const [message, setMessage] = useState<string | null>(null)
   const [manual, setManual] = useState("")
+  const [pendingCommand, setPendingCommand] = useState<{
+    slug: string
+    label: string
+    details: Record<string, string>
+  } | null>(null)
 
   function navigate(slug: string, label: string, details: Record<string, string> = {}) {
     const params = new URLSearchParams(details)
@@ -242,7 +327,17 @@ export function VoiceCommand() {
       setListening(false)
       const command = matchCommand(finalTranscript)
       if (command) {
-        navigate(command.slug, command.label, extractDetails(command.slug, finalTranscript))
+        const details = extractDetails(command.slug, finalTranscript)
+        setPendingCommand({ slug: command.slug, label: command.label, details })
+        setMessage(
+          Object.keys(details).length > 0
+            ? `J'ai compris : ${command.label}. Informations détectées : ${Object.entries(
+                details,
+              )
+                .map(([key, value]) => `${key} = ${value}`)
+                .join(", ")}. Confirme ou annule.`
+            : `J'ai compris : ${command.label}. Confirme ou annule.`,
+        )
       } else if (finalTranscript.trim()) {
         setMessage(
           "Je n'ai pas reconnu. Essaie « passeport », « TVM », « visite technique » ou « facture SONEB ».",
@@ -330,6 +425,31 @@ export function VoiceCommand() {
           </button>
         ))}
       </div>
+
+      {pendingCommand && (
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              navigate(pendingCommand.slug, pendingCommand.label, pendingCommand.details)
+              setPendingCommand(null)
+            }}
+            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90"
+          >
+            Confirmer
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPendingCommand(null)
+              setMessage("Annulé.")
+            }}
+            className="rounded-lg border bg-background px-3 py-1.5 text-xs font-medium transition hover:border-primary/40"
+          >
+            Annuler
+          </button>
+        </div>
+      )}
 
       <form onSubmit={handleManualSubmit} className="mt-3 flex gap-2">
         <input
