@@ -61,6 +61,7 @@ npm run dev
 - Front : http://localhost:3000
 - API : http://localhost:4001 (4000 est souvent pris par un autre service local)
 - Santé API : http://localhost:4001/health
+- Service facial : http://localhost:8000/health (optionnel, pour le scan réel)
 
 Parcours de démo : **Scanner mon visage** → choisir un service → créer le dossier → payer (numéro `01 XX XX XX XX`) → regarder le statut avancer.
 
@@ -74,6 +75,7 @@ JWT_SECRET="mindbenin-dev-secret-change-me"
 PORT=4001
 WEB_ORIGIN="http://localhost:3000"
 ADMIN_ACCESS_CODE="mindbenin-admin"        # accès au back-office /admin
+FACE_SERVICE_URL="http://localhost:8000"    # service facial Python (scan reel)
 
 FEDAPAY_SECRET_KEY=""                     # clé sk_sandbox_… / sk_live_…
 FEDAPAY_BASE_URL="https://sandbox-api.fedapay.com/v1"
@@ -116,6 +118,23 @@ L'espace agents est disponible sur http://localhost:3000/admin. Il permet de :
 La connexion se fait avec le code défini par `ADMIN_ACCESS_CODE` (par défaut `mindbenin-admin` en développement). **Change-le avant toute mise en ligne.** La session admin est un JWT de 12 h stocké dans un cookie `httpOnly` séparé (`mb_admin`) et vérifié à chaque appel de l'API.
 
 Dès qu'un agent change un statut, l'avancement automatique de la démo est désactivé pour ce dossier (`manualOverride`) : le dossier ne bouge plus que sur action humaine.
+
+## Scan facial réel (service Python)
+
+Le scan utilise une vraie caméra et une détection de visage réelle via un microservice Python `apps/face` (MediaPipe). L'API NestJS l'appelle pour valider qu'un visage est présent dans la photo capturée ; si le service est indisponible, le scan repasse automatiquement en mode simulé.
+
+```bash
+# Dans un troisième terminal
+cd apps/face
+python -m venv .venv
+.venv\\Scripts\\activate          # Windows
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+- Santé : http://localhost:8000/health
+- Détection : `POST /detect` (image multipart ou JSON `{ "image": "data:image/jpeg;base64,..." }`)
+- Variable `FACE_SERVICE_URL` dans `apps/api/.env` (vide = mode simulé).
 
 ## API
 

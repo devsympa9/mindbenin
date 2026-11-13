@@ -1,3 +1,5 @@
+name: mindbenin
+
 services:
   db:
     image: postgres:16-alpine
@@ -16,6 +18,81 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  face:
+    build:
+      context: ./apps/face
+    container_name: mindbenin-face
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: mindbenin-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "4001"
+      DATABASE_URL: postgresql://mindbenin:mindbenin@db:5432/mindbenin?schema=public
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:4001}
+      JWT_SECRET: ${JWT_SECRET:-mindbenin-dev-secret-change-me}
+      ADMIN_ACCESS_CODE: ${ADMIN_ACCESS_CODE:-mindbenin-admin}
+      FACE_SERVICE_URL: http://face:8000
+      FEDAPAY_SECRET_KEY: ${FEDAPAY_SECRET_KEY:-}
+      FEDAPAY_BASE_URL: ${FEDAPAY_BASE_URL:-https://sandbox-api.fedapay.com/v1}
+      FEDAPAY_CALLBACK_URL: ${FEDAPAY_CALLBACK_URL:-http://localhost:4001/payments/fedapay/callback}
+    ports:
+      - "4001:4001"
+    depends_on:
+      db:
+        condition: service_healthy
+      face:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: mindbenin-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      API_INTERNAL_URL: http://api:4001
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
 
 volumes:
   mindbenin_pgdata:

@@ -20,6 +20,9 @@ export function ServiceForm({ service, user }: { service: ServiceDTO; user: User
   )
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const billAmount = service.amountField
+    ? Number((values[service.amountField] ?? "").replace(/[^0-9]/g, ""))
+    : 0
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -108,23 +111,50 @@ export function ServiceForm({ service, user }: { service: ServiceDTO; user: User
         <h2 className="text-xs font-semibold">Détail du prix</h2>
 
         <dl className="mt-3 space-y-1.5 text-xs">
-          <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">Frais officiels {service.shortName.toLowerCase()}</dt>
-            <dd className="font-medium">{formatFcfa(service.officialPrice)}</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">Frais de confort MindBenin</dt>
-            <dd className="font-medium">{formatFcfa(service.commission)}</dd>
-          </div>
-          <div className="flex justify-between gap-4 border-t pt-2 text-sm font-semibold">
-            <dt>Total</dt>
-            <dd>{formatFcfa(service.officialPrice + service.commission)}</dd>
-          </div>
+          {service.amountField ? (
+            <>
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Montant de ta facture</dt>
+                <dd className="font-medium">
+                  {billAmount > 0 ? formatFcfa(billAmount) : "À saisir"}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Frais de confort MindBenin</dt>
+                <dd className="font-medium">{formatFcfa(service.commission)}</dd>
+              </div>
+              <div className="flex justify-between gap-4 border-t pt-2 text-sm font-semibold">
+                <dt>Total</dt>
+                <dd>
+                  {billAmount > 0
+                    ? formatFcfa(billAmount + service.commission)
+                    : `Montant + ${formatFcfa(service.commission)}`}
+                </dd>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">
+                  Frais officiels {service.shortName.toLowerCase()}
+                </dt>
+                <dd className="font-medium">{formatFcfa(service.officialPrice)}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Frais de confort MindBenin</dt>
+                <dd className="font-medium">{formatFcfa(service.commission)}</dd>
+              </div>
+              <div className="flex justify-between gap-4 border-t pt-2 text-sm font-semibold">
+                <dt>Total</dt>
+                <dd>{formatFcfa(service.officialPrice + service.commission)}</dd>
+              </div>
+            </>
+          )}
         </dl>
 
         <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
           Le paiement mobile money se fait à l&apos;étape suivante. Le prestataire ne prend aucune
-          commission sur les frais de l&apos;État.
+          commission sur les frais officiels.
         </p>
       </section>
 

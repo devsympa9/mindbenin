@@ -84,7 +84,7 @@ const PHASES = [
   {
     label: "Phase 1 · MVP",
     title: "La démo",
-    description: "Scan, paiement et administration simulés. 4 services, un parcours complet.",
+    description: "Scan facial réel, paiement simulé. 8 services, un parcours complet.",
     state: "Aujourd'hui",
   },
   {
@@ -142,9 +142,9 @@ export default function LandingPage() {
               </h1>
 
               <p className="mt-5 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-                Passeport, acte de naissance, casier judiciaire, impôts. MindBenin remplit le
-                formulaire avec ton NPI, paie les frais officiels et suit ton dossier. Tu ne fais
-                plus la queue : tu viens récupérer.
+                Passeport, acte de naissance, casier judiciaire, impôts, TVM, visite technique,
+                factures SONEB et SBEE. MindBenin remplit le formulaire avec ton NPI, paie les frais
+                et suit ton dossier. Tu ne fais plus la queue : tu viens récupérer.
               </p>
 
               <div className="mt-7 flex flex-wrap gap-3">
@@ -292,7 +292,7 @@ export default function LandingPage() {
                 Transparence
               </p>
               <h2 className="mt-2 text-3xl font-semibold tracking-tight">
-                Le prix officiel, plus 1 000 FCFA de confort.
+                Le prix officiel, plus une commission de confort.
               </h2>
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                 MindBenin ne touche pas à l&apos;argent de l&apos;État. La commission paie le

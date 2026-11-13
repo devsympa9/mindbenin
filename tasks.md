@@ -31,10 +31,20 @@ Suivi de l'implémentation de la démo (Phase 1 du document `project.md`).
 - [x] Mode simulé automatique si `FEDAPAY_SECRET_KEY` est vide (démo hors ligne, reçu `MB-…`).
 - [x] Écran « Paiement en attente » avec reprise du checkout et vérification manuelle.
 
+### Scan facial réel (Python)
+
+- [x] Microservice Python `apps/face` (FastAPI + MediaPipe) : détection de visage réelle sur la photo capturée.
+- [x] Modèle MediaPipe `blaze_face_short_range` embarqué dans `apps/face/models`.
+- [x] Endpoint `POST /detect` (multipart ou JSON base64) + `GET /health`.
+- [x] Service NestJS `FaceVerificationService` qui appelle le service Python (variable `FACE_SERVICE_URL`).
+- [x] `POST /identity/scan` accepte une image et rejette si aucun visage n'est détecté (quand le service est actif).
+- [x] Front : capture réelle depuis la caméra (canvas) et envoi de la photo, retour `faceVerified` / `simulated`.
+- [x] Fallback automatique en mode simulé si le service Python est indisponible ou si aucune image n'est fournie.
+
 ### Frontend — Next.js 16 + Tailwind 4 + shadcn/ui
 
 - [x] Landing page : problème, parcours en 5 étapes, transparence des prix, 3 technologies, 3 phases.
-- [x] Scan d'identité avec aperçu caméra optionnel, étapes animées, carte d'identité NPI.
+- [x] Scan d'identité avec capture réelle depuis la caméra, détection de visage (service Python) ou mode simulé, étapes animées, carte d'identité NPI.
 - [x] Session httpOnly : le front stocke le JWT et relaie les appels à l'API via des server actions.
 - [x] Accueil app : identité ANIP, commande vocale (Web Speech API + saisie texte), 4 services, dossiers récents.
 - [x] Page service : pré-requis, formulaire pré-rempli, détail officiel + commission, création du dossier.

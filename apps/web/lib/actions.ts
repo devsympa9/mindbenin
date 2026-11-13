@@ -23,12 +23,20 @@ function toErrorMessage(error: unknown): string {
   return "Impossible de joindre le serveur. Vérifie que l'API est démarrée."
 }
 
-export async function scanIdentityAction(): Promise<ActionResult<UserDTO>> {
+export async function scanIdentityAction(
+  image?: string,
+): Promise<ActionResult<UserDTO & { faceVerified?: boolean; simulated?: boolean }>> {
   try {
-    const result = await apiFetch<ScanResponse>("/identity/scan", { method: "POST" })
+    const result = await apiFetch<ScanResponse>("/identity/scan", {
+      method: "POST",
+      body: image ? { image } : {},
+    })
     const store = await cookies()
     store.set(TOKEN_COOKIE, result.token, COOKIE_OPTIONS)
-    return { ok: true, data: result.user }
+    return {
+      ok: true,
+      data: { ...result.user, faceVerified: result.faceVerified, simulated: result.simulated },
+    }
   } catch (error) {
     return { ok: false, error: toErrorMessage(error) }
   }

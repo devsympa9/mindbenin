@@ -18,6 +18,7 @@ export type ServiceDTO = {
   icon: string
   officialPrice: number
   commission: number
+  amountField: string | null
   processingDays: number
   pickupLocation: string
   requirements: string[]
@@ -77,6 +78,8 @@ export type DossierDTO = {
 export type ScanResponse = {
   token: string
   user: UserDTO
+  faceVerified?: boolean
+  simulated?: boolean
 }
 
 export type AdminDossierDTO = DossierDTO & {

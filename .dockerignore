@@ -1,0 +1,15 @@
+.git
+.gitignore
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+**/*.log
+**/.env
+**/.env.*
+apps/face/.venv
+apps/face/__pycache__
+apps/face/**/*.pyc
+README.md
+tasks.md
+project.md

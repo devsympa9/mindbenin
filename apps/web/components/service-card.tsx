@@ -18,7 +18,9 @@ export function ServiceCard({ service }: { service: ServiceDTO }) {
       <span className="flex-1">
         <span className="block text-sm font-semibold">{service.shortName}</span>
         <span className="mt-1 block text-xs text-muted-foreground">
-          {formatFcfa(service.officialPrice + service.commission)}
+          {service.amountField
+            ? `Montant + ${formatFcfa(service.commission)}`
+            : formatFcfa(service.officialPrice + service.commission)}
         </span>
       </span>
       <span className="flex items-center justify-between text-[11px] text-muted-foreground">

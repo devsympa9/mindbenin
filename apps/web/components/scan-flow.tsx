@@ -36,11 +36,13 @@ export function ScanFlow() {
   const [phase, setPhase] = useState<"idle" | "scanning" | "done">("idle")
   const [step, setStep] = useState(0)
   const [user, setUser] = useState<UserDTO | null>(null)
+  const [scanMeta, setScanMeta] = useState<{ faceVerified: boolean; simulated: boolean } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
 
   function stopCamera() {
@@ -86,18 +88,41 @@ export function ScanFlow() {
     }
   }
 
+  function capturePhoto(): string | null {
+    const video = videoRef.current
+
+    if (!video || !cameraActive || !video.videoWidth) {
+      return null
+    }
+
+    const canvas = canvasRef.current ?? document.createElement("canvas")
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const context = canvas.getContext("2d")
+
+    if (!context) {
+      return null
+    }
+
+    context.drawImage(video, 0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL("image/jpeg", 0.82)
+  }
+
   async function startScan() {
     setPhase("scanning")
     setError(null)
     setUser(null)
+    setScanMeta(null)
     setStep(0)
+
+    const image = capturePhoto()
 
     await wait(600)
     setStep(1)
     await wait(700)
     setStep(2)
 
-    const result = await scanIdentityAction()
+    const result = await scanIdentityAction(image ?? undefined)
 
     if (!result.ok) {
       setError(result.error)
@@ -107,6 +132,10 @@ export function ScanFlow() {
 
     stopCamera()
     setUser(result.data)
+    setScanMeta({
+      faceVerified: result.data.faceVerified ?? false,
+      simulated: result.data.simulated ?? true,
+    })
     setStep(3)
     setPhase("done")
   }
@@ -122,9 +151,16 @@ export function ScanFlow() {
             </p>
           </div>
           <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary">
-            <IconShieldCheck size={12} aria-hidden="true" /> ANIP · simulé
+            <IconShieldCheck size={12} aria-hidden="true" />
+            {scanMeta
+              ? scanMeta.faceVerified
+                ? "Visage vérifié"
+                : "Identité simulée"
+              : "Scan facial · démo"}
           </span>
         </div>
+
+        <canvas ref={canvasRef} className="hidden" />
 
         <div className="relative mx-auto mt-5 aspect-[4/5] w-full max-w-[230px] overflow-hidden rounded-2xl border-2 border-dashed border-primary/30 bg-background">
           <video
@@ -255,8 +291,9 @@ export function ScanFlow() {
       )}
 
       <p className="text-center text-[10px] leading-relaxed text-muted-foreground">
-        Démo : l&apos;ANIP est simulée et aucune donnée réelle n&apos;est utilisée. En V1, ce scan
-        appellera l&apos;API ANIP avec ta photo.
+        {scanMeta?.faceVerified
+          ? "Visage vérifié par le service facial Python (MediaPipe). L'identité ANIP reste simulée en attendant l'accord d'accès."
+          : "Démo : l'ANIP est simulée. Active la caméra et le service facial (apps/face) pour un scan réel du visage."}
       </p>
     </div>
   )

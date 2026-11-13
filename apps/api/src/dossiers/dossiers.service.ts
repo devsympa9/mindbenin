@@ -109,6 +109,22 @@ export class DossiersService {
       }
     }
 
+    let officialPrice = service.officialPrice
+
+    if (service.amountField) {
+      const rawAmount = answers[service.amountField] ?? ""
+      const amount = Number(rawAmount.replace(/[^0-9]/g, ""))
+
+      if (!Number.isInteger(amount) || amount < 500 || amount > 1_000_000) {
+        throw new BadRequestException(
+          "Montant de facture invalide. Indique un montant entre 500 et 1 000 000 FCFA.",
+        )
+      }
+
+      officialPrice = amount
+      answers[service.amountField] = `${new Intl.NumberFormat("fr-FR").format(amount)} FCFA`
+    }
+
     const formData: Record<string, string> = {
       nom: user.lastName,
       prenoms: user.firstName,
@@ -125,9 +141,9 @@ export class DossiersService {
         serviceId: service.id,
         status: "DEMANDE_ENVOYEE",
         formData: formData as Prisma.InputJsonValue,
-        officialPrice: service.officialPrice,
+        officialPrice,
         commission: service.commission,
-        totalAmount: service.officialPrice + service.commission,
+        totalAmount: officialPrice + service.commission,
         pickupLocation: service.pickupLocation,
         events: {
           create: {

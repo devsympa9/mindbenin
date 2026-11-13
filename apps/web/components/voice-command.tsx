@@ -42,6 +42,26 @@ const COMMANDS = [
     label: "Impôts",
     keywords: ["impot", "taxe", "fiscal", "dgi", "declaration"],
   },
+  {
+    slug: "tvm",
+    label: "TVM",
+    keywords: ["tvm", "vehicule", "voiture", "carte grise", "taxe vehicule"],
+  },
+  {
+    slug: "visite-technique",
+    label: "Visite technique",
+    keywords: ["visite technique", "controle technique", "technique"],
+  },
+  {
+    slug: "facture-soneb",
+    label: "Facture SONEB",
+    keywords: ["soneb", "eau", "facture eau"],
+  },
+  {
+    slug: "facture-sbee",
+    label: "Facture SBEE",
+    keywords: ["sbee", "electricite", "courant", "facture electricite"],
+  },
 ] as const
 
 function normalize(value: string): string {
@@ -126,7 +146,9 @@ export function VoiceCommand() {
     const command = matchCommand(manual)
 
     if (!command) {
-      setMessage("Je n'ai pas reconnu. Essaie « passeport », « acte de naissance » ou « impôts ».")
+      setMessage(
+        "Je n'ai pas reconnu. Essaie « passeport », « TVM », « visite technique » ou « facture SONEB ».",
+      )
       return
     }
 

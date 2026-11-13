@@ -47,6 +47,13 @@ const FIELD_LABELS: Record<string, string> = {
   motif: "Motif",
   typeDeclaration: "Type de déclaration",
   revenuAnnuel: "Revenu annuel",
+  categorieVehicule: "Catégorie du véhicule",
+  puissanceFiscale: "Puissance fiscale",
+  typeVehicule: "Type de véhicule",
+  immatriculation: "Immatriculation",
+  centre: "Centre de visite",
+  numeroFacture: "Numéro de facture",
+  montantFacture: "Montant de la facture",
 }
 
 function labelFor(key: string): string {
