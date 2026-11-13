@@ -21,7 +21,7 @@ from pathlib import Path
 import cv2
 import mediapipe as mp
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -48,7 +48,7 @@ def get_detector():
     if _detector is None:
         if not Path(MODEL_PATH).exists():
             raise RuntimeError(f"Modele introuvable : {MODEL_PATH}")
-        base = mp.tasks.python.BaseOptions(model_asset_path=MODEL_PATH)
+        base = mp.tasks.BaseOptions(model_asset_path=MODEL_PATH)
         options = mp.tasks.vision.FaceDetectorOptions(base_options=base)
         _detector = mp.tasks.vision.FaceDetector.create_from_options(options)
     return _detector
@@ -98,19 +98,30 @@ def health():
 
 
 @app.post("/detect")
-async def detect(file: UploadFile | None = File(None), payload: DetectRequest | None = None):
-    if file is not None:
-        raw = await file.read()
-    elif payload is not None and payload.image:
-        encoded = payload.image
+async def detect(request: Request):
+    content_type = request.headers.get("content-type", "")
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        uploaded = form.get("file")
+        if uploaded is None:
+            raise HTTPException(status_code=400, detail="Aucune image fournie.")
+        raw = await uploaded.read()
+    else:
+        try:
+            body = await request.json()
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail="Corps JSON invalide.") from exc
+
+        encoded = body.get("image") if isinstance(body, dict) else None
+        if not encoded:
+            raise HTTPException(status_code=400, detail="Aucune image fournie.")
         if "," in encoded:
             encoded = encoded.split(",", 1)[1]
         try:
             raw = base64.b64decode(encoded, validate=True)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=400, detail="Image base64 invalide.") from exc
-    else:
-        raise HTTPException(status_code=400, detail="Aucune image fournie.")
 
     image = decode_image(raw)
     try:

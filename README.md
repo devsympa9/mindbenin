@@ -31,8 +31,9 @@ apps/
     app/               landing, scan, /app, services, dossiers
     components/
     lib/               client API, session, server actions, statuts
+  face/                Service Python de détection faciale (port 8000)
 packages/              design system et configs partagées
-docker-compose.yml     PostgreSQL local
+docker-compose.yml     Stack complète (Postgres, API, web, service facial)
 tasks.md               état d'avancement et suite
 project.md             note produit
 ```
@@ -63,9 +64,19 @@ npm run dev
 - Santé API : http://localhost:4001/health
 - Service facial : http://localhost:8000/health (optionnel, pour le scan réel)
 
+## Docker (tout le projet)
+
+```bash
+docker compose up -d --build
+```
+
+Lance PostgreSQL, l'API (4001), le front (3000) et le service facial (8000). Les données Postgres sont conservées dans le volume `mindbenin_pgdata`. Les clés et codes se passent par un fichier `.env` à la racine (variables `FEDAPAY_SECRET_KEY`, `ADMIN_ACCESS_CODE`, `JWT_SECRET`, etc.) ; sans clé FedaPay le paiement reste simulé.
+
 Parcours de démo : **Scanner mon visage** → choisir un service → créer le dossier → payer (numéro `01 XX XX XX XX`) → regarder le statut avancer.
 
 ## Variables d'environnement
+
+Pour Docker, créer un fichier `.env` à la racine avec les mêmes variables (`FEDAPAY_*`, `ADMIN_ACCESS_CODE`, `JWT_SECRET`, `WEB_ORIGIN`, …). La compose les transmet à l'API.
 
 `apps/api/.env` (fourni pour le développement local) :
 

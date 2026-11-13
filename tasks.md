@@ -9,7 +9,7 @@ Suivi de l'implémentation de la démo (Phase 1 du document `project.md`).
 - [x] Application NestJS `apps/api` (port 4001) découplée du front Next.js.
 - [x] Schéma Prisma : `User`, `Service`, `Dossier`, `DossierEvent`, `Payment` + enums de statut.
 - [x] Base PostgreSQL locale via `docker-compose.yml` (port 5433, volume persistant).
-- [x] Seed des 4 services : passeport, acte de naissance, casier judiciaire, impôts (prix officiel, commission, délais, lieu de retrait, champs de formulaire).
+- [x] Seed des 8 services : passeport, acte de naissance, casier judiciaire, impôts, TVM, visite technique, factures SONEB et SBEE (prix officiel ou montant de facture variable, commission, délais, lieu de retrait, champs de formulaire).
 - [x] `POST /identity/scan` : scan facial + ANIP simulés, création de l'utilisateur, JWT 30 jours.
 - [x] `GET /identity/me` : identité courante (protégé par `AuthGuard`).
 - [x] `GET /services` et `GET /services/:slug` : catalogue public.
@@ -46,7 +46,7 @@ Suivi de l'implémentation de la démo (Phase 1 du document `project.md`).
 - [x] Landing page : problème, parcours en 5 étapes, transparence des prix, 3 technologies, 3 phases.
 - [x] Scan d'identité avec capture réelle depuis la caméra, détection de visage (service Python) ou mode simulé, étapes animées, carte d'identité NPI.
 - [x] Session httpOnly : le front stocke le JWT et relaie les appels à l'API via des server actions.
-- [x] Accueil app : identité ANIP, commande vocale (Web Speech API + saisie texte), 4 services, dossiers récents.
+- [x] Accueil app : identité ANIP, commande vocale (Web Speech API + saisie texte), 8 services, dossiers récents.
 - [x] Page service : pré-requis, formulaire pré-rempli, détail officiel + commission, création du dossier.
 - [x] Page dossier : paiement FedaPay, suivi « en attente », barre de progression, timeline, lieu de retrait, reçu, historique.
 - [x] Suivi en direct par polling (3 s) jusqu'au statut « Prêt à récupérer ».
@@ -64,9 +64,18 @@ Suivi de l'implémentation de la démo (Phase 1 du document `project.md`).
 - [x] Transitions contrôlées et paiement obligatoire avant « prêt » / « récupéré ».
 - [x] `manualOverride` : l'avancement automatique de la démo s'arrête dès qu'un agent intervient.
 
+### Dockerisation
+
+- [x] `apps/api/Dockerfile`, `apps/web/Dockerfile` (output standalone) et `apps/face/Dockerfile`.
+- [x] `docker-compose.yml` : Postgres, API, web et service facial, healthchecks, volume persistant.
+- [x] Scan réel validé de bout en bout dans Docker (photo avec visage → `faceVerified: true`).
+- [x] Services et paiement simulé validés dans Docker (8 services, TVM, factures variables, admin).
+
 ### Base de données
 
-- [x] `prisma db push` appliqué, seed exécuté (4 services).
+- [x] `prisma db push` appliqué, seed exécuté (8 services).
+- [x] Montant variable pour SONEB/SBEE : validation côté serveur (500 à 1 000 000 FCFA), total = montant + commission.
+- [x] Services TVM et visite technique : prix fixes avec champs véhicule (catégorie, puissance, immatriculation, centre).
 - [x] Configuration locale documentée dans `README.md`.
 
 ## Prochaines étapes (Phase 2 — V1 réelle)
