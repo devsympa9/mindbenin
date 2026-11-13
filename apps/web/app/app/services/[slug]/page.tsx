@@ -12,10 +12,18 @@ export const dynamic = "force-dynamic"
 
 export default async function ServicePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { slug } = await params
+  const resolvedSearchParams = (await searchParams) ?? {}
+  const initialValues: Record<string, string> = {}
+  for (const [key, value] of Object.entries(resolvedSearchParams)) {
+    if (typeof value === "string") initialValues[key] = value
+    else if (Array.isArray(value) && value[0]) initialValues[key] = value[0]
+  }
   const user = await requireUser()
 
   const service = await apiFetch<ServiceDTO>(`/services/${slug}`).catch((error: unknown) => {
@@ -69,7 +77,7 @@ export default async function ServicePage({
         </ul>
       </section>
 
-      <ServiceForm service={service} user={user} />
+      <ServiceForm service={service} user={user} initialValues={initialValues} />
     </div>
   )
 }

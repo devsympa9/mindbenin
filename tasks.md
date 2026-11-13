@@ -47,6 +47,7 @@ Suivi de l'implémentation de la démo (Phase 1 du document `project.md`).
 - [x] Scan d'identité avec capture réelle depuis la caméra, détection de visage (service Python) ou mode simulé, étapes animées, carte d'identité NPI.
 - [x] Session httpOnly : le front stocke le JWT et relaie les appels à l'API via des server actions.
 - [x] Accueil app : identité ANIP, commande vocale (Web Speech API + saisie texte), 8 services, dossiers récents.
+- [x] Commande vocale : extraction du numéro de compteur, du montant et de la plaque, pré-remplissage du formulaire de service.
 - [x] Page service : pré-requis, formulaire pré-rempli, détail officiel + commission, création du dossier.
 - [x] Page dossier : paiement FedaPay, suivi « en attente », barre de progression, timeline, lieu de retrait, reçu, historique.
 - [x] Suivi en direct par polling (3 s) jusqu'au statut « Prêt à récupérer ».

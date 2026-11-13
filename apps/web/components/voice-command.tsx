@@ -71,6 +71,113 @@ function normalize(value: string): string {
     .replace(/[\u0300-\u036f]/g, "")
 }
 
+function findSelectOption(text: string, options: readonly string[]): string | undefined {
+  const normalizedText = normalize(text)
+  const direct = options.find((option) => normalizedText.includes(normalize(option)))
+  if (direct) return direct
+
+  const keywords: Record<string, string> = {
+    voiture: "Voiture particulière",
+    moto: "Moto",
+    camion: "Camion",
+    utilitaire: "Utilitaire",
+    cotonou: "Cotonou",
+    portonovo: "Porto-Novo",
+    parakou: "Parakou",
+    abomey: "Abomey-Calavi",
+    calavi: "Abomey-Calavi",
+  }
+
+  for (const [keyword, option] of Object.entries(keywords)) {
+    if (normalizedText.includes(keyword) && options.includes(option)) return option
+  }
+
+  if (normalizedText.includes("10")) {
+    const ten = options.find((option) => option.includes("10 CV"))
+    if (ten) return ten
+  }
+  if (/[789]/.test(normalizedText)) {
+    const mid = options.find((option) => option.includes("7 à 9"))
+    if (mid) return mid
+  }
+  if (/[456]/.test(normalizedText)) {
+    const low = options.find((option) => option.includes("4 à 6"))
+    if (low) return low
+  }
+
+  return undefined
+}
+
+function extractDetails(slug: string, text: string): Record<string, string> {
+  const details: Record<string, string> = {}
+
+  if (slug === "facture-soneb" || slug === "facture-sbee") {
+    const meterFromKeyword = text.match(
+      /(?:num[eé]ro|compteur|facture)\s*(?:de\s*(?:facture|compteur))?\s*[:=]?\s*([0-9][0-9\s.,-]{4,})/i,
+    )?.[1]?.replace(/[^0-9]/g, "")
+
+    const amountFromKeyword = text.match(
+      /(?:montant|a payer|payer|somme)\s*(?:de\s*la\s*facture)?\s*[:=]?\s*([0-9][0-9\s.,]*)/i,
+    )?.[1]?.replace(/[^0-9]/g, "")
+
+    const groups =
+      text
+        .match(/\d[\d\s.,]*/g)
+        ?.map((group) => group.replace(/[^0-9]/g, ""))
+        .filter((group) => group.length > 0) ?? []
+
+    let meter = meterFromKeyword
+    let amount = amountFromKeyword
+
+    if (!meter && groups.length > 0) {
+      meter = groups.reduce((best, current) =>
+        current.length >= best.length ? current : best,
+      )
+    }
+
+    if (!amount && groups.length > 1) {
+      const candidates = groups.filter((group) => group !== meter)
+      if (candidates.length > 0) {
+        amount = candidates.reduce((best, current) =>
+          current.length <= best.length ? current : best,
+        )
+      }
+    }
+
+    if (meter && amount && meter === amount && groups.length > 1) {
+      const sorted = [...groups].sort((a, b) => b.length - a.length)
+      meter = sorted[0]
+      amount = sorted[sorted.length - 1]
+    }
+
+    if (meter) details.numeroFacture = meter
+    if (amount) details.montantFacture = amount
+  }
+
+  if (slug === "visite-technique" || slug === "tvm") {
+    const plate = text.match(/\b([a-zA-Z]{2}\s?\d{3,4}\s?[a-zA-Z]{2})\b/)?.[1]
+    if (plate) details.immatriculation = plate.replace(/\s+/g, " ").trim().toUpperCase()
+
+    const vehicleField = slug === "tvm" ? "categorieVehicule" : "typeVehicule"
+    const serviceFields =
+      slug === "tvm"
+        ? ["Voiture particulière", "Utilitaire", "Moto", "Camion"]
+        : ["Voiture particulière", "Utilitaire", "Moto", "Camion"]
+    const vehicleOption = findSelectOption(text, serviceFields)
+    if (vehicleOption) details[vehicleField] = vehicleOption
+
+    if (slug === "tvm") {
+      const powerOption = findSelectOption(text, ["4 à 6 CV", "7 à 9 CV", "10 CV et plus"])
+      if (powerOption) details.puissanceFiscale = powerOption
+    } else {
+      const centreOption = findSelectOption(text, ["Cotonou", "Porto-Novo", "Parakou", "Abomey-Calavi"])
+      if (centreOption) details.centre = centreOption
+    }
+  }
+
+  return details
+}
+
 function matchCommand(value: string) {
   const text = normalize(value)
   return COMMANDS.find((command) =>
@@ -85,9 +192,18 @@ export function VoiceCommand() {
   const [message, setMessage] = useState<string | null>(null)
   const [manual, setManual] = useState("")
 
-  function navigate(slug: string, label: string) {
-    setMessage(`Je lance : ${label}`)
-    window.setTimeout(() => router.push(`/app/services/${slug}`), 500)
+  function navigate(slug: string, label: string, details: Record<string, string> = {}) {
+    const params = new URLSearchParams(details)
+    const query = params.toString()
+    setMessage(
+      Object.keys(details).length > 0
+        ? `Je lance : ${label} avec les informations détectées.`
+        : `Je lance : ${label}`,
+    )
+    window.setTimeout(
+      () => router.push(`/app/services/${slug}${query ? `?${query}` : ""}`),
+      500,
+    )
   }
 
   function startListening() {
@@ -107,6 +223,7 @@ export function VoiceCommand() {
       return
     }
 
+    let finalTranscript = ""
     const recognition = new Recognition()
     recognition.lang = "fr-FR"
     recognition.interimResults = true
@@ -118,10 +235,18 @@ export function VoiceCommand() {
       }).join(" ")
 
       setTranscript(text)
+      finalTranscript = text
+    }
 
-      const command = matchCommand(text)
+    recognition.onend = () => {
+      setListening(false)
+      const command = matchCommand(finalTranscript)
       if (command) {
-        navigate(command.slug, command.label)
+        navigate(command.slug, command.label, extractDetails(command.slug, finalTranscript))
+      } else if (finalTranscript.trim()) {
+        setMessage(
+          "Je n'ai pas reconnu. Essaie « passeport », « TVM », « visite technique » ou « facture SONEB ».",
+        )
       }
     }
 
@@ -129,8 +254,6 @@ export function VoiceCommand() {
       setListening(false)
       setMessage("Micro indisponible. Tu peux écrire ta demande.")
     }
-
-    recognition.onend = () => setListening(false)
 
     try {
       recognition.start()
@@ -152,7 +275,7 @@ export function VoiceCommand() {
       return
     }
 
-    navigate(command.slug, command.label)
+    navigate(command.slug, command.label, extractDetails(command.slug, manual))
   }
 
   return (

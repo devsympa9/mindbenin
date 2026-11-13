@@ -8,16 +8,38 @@ import { createDossierAction } from "@/lib/actions"
 import { formatDate, formatFcfa } from "@/lib/format"
 import type { ServiceDTO, UserDTO } from "@/lib/types"
 
-export function ServiceForm({ service, user }: { service: ServiceDTO; user: UserDTO }) {
+export function ServiceForm({
+  service,
+  user,
+  initialValues,
+}: {
+  service: ServiceDTO
+  user: UserDTO
+  initialValues?: Record<string, string>
+}) {
   const router = useRouter()
-  const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const base = Object.fromEntries(
       service.fields.map((field) => [
         field.name,
         field.type === "select" ? (field.options?.[0] ?? "") : "",
       ]),
-    ),
-  )
+    )
+
+    if (initialValues) {
+      for (const field of service.fields) {
+        const value = initialValues[field.name]
+        if (!value) continue
+        if (field.type === "select") {
+          if (field.options?.includes(value)) base[field.name] = value
+        } else {
+          base[field.name] = value
+        }
+      }
+    }
+
+    return base
+  })
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const billAmount = service.amountField
@@ -69,6 +91,12 @@ export function ServiceForm({ service, user }: { service: ServiceDTO; user: User
           </div>
         </dl>
       </section>
+
+      {initialValues && Object.keys(initialValues).length > 0 && (
+        <p className="rounded-xl bg-primary/10 px-3 py-2 text-xs text-primary">
+          Champs pré-remplis depuis ta commande vocale. Vérifie avant de valider.
+        </p>
+      )}
 
       {service.fields.length > 0 && (
         <section className="space-y-3 rounded-2xl border bg-card p-4">
