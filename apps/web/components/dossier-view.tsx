@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   IconArrowLeft,
   IconBell,
@@ -18,6 +18,7 @@ import { cn } from "@workspace/ui/lib/utils"
 
 import { getDossierAction, payDossierAction } from "@/lib/actions"
 import { formatDateTime, formatFcfa } from "@/lib/format"
+import { speak } from "@/lib/speech"
 import {
   PAYMENT_PROVIDER_META,
   STATUS_META,
@@ -31,6 +32,7 @@ import type { DossierDTO } from "@/lib/types"
 
 import { ServiceIcon } from "./service-icon"
 import { StatusPill } from "./status-pill"
+import { SpeakButton, VoiceRepliesToggle } from "./voice-replies"
 
 const PROVIDERS: PaymentProviderValue[] = ["MTN_MOMO", "MOOV_MONEY"]
 
@@ -70,6 +72,7 @@ export function DossierView({ initial }: { initial: DossierDTO }) {
   const [phone, setPhone] = useState("")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const spokenStatus = useRef(dossier.status)
 
   const paid = Boolean(dossier.payment?.paidAt)
   const pendingPayment = Boolean(dossier.payment && !dossier.payment.paidAt)
@@ -84,6 +87,15 @@ export function DossierView({ initial }: { initial: DossierDTO }) {
       setDossier(result.data)
     }
   }, [dossier.reference])
+
+  useEffect(() => {
+    if (dossier.status === spokenStatus.current) {
+      return
+    }
+
+    spokenStatus.current = dossier.status
+    speak(`Point sur ton dossier : ${STATUS_META[dossier.status].label}.`)
+  }, [dossier.status])
 
   useEffect(() => {
     if (final || (!paid && !pendingPayment)) {
@@ -106,19 +118,35 @@ export function DossierView({ initial }: { initial: DossierDTO }) {
 
     if (!result.ok) {
       setError(result.error)
+      speak(result.error)
       setPending(false)
       return
     }
 
+    spokenStatus.current = result.data.status
     setDossier(result.data)
     setPending(false)
 
     const checkoutUrl = result.data.payment?.checkoutUrl
 
     if (checkoutUrl && !result.data.payment?.paidAt) {
+      speak("Paiement créé. Termine la validation sur la page sécurisée FedaPay.")
       window.location.assign(checkoutUrl)
+      return
     }
+
+    speak(
+      `Paiement de ${formatFcfa(result.data.totalAmount)} confirmé pour ${
+        result.data.service.shortName
+      }. Ton dossier est maintenant : ${STATUS_META[result.data.status].label}.`,
+    )
   }
+
+  const statusSentence = `Dossier ${dossier.reference.replace(/-/g, " ")}. ${
+    dossier.service.name
+  }. Statut : ${STATUS_META[dossier.status].label}. Montant : ${formatFcfa(
+    dossier.totalAmount,
+  )}. Lieu de retrait : ${dossier.pickupLocation}.`
 
   return (
     <div className="space-y-5">
@@ -129,7 +157,10 @@ export function DossierView({ initial }: { initial: DossierDTO }) {
         >
           <IconArrowLeft size={14} aria-hidden="true" /> Mes dossiers
         </Link>
-        <span className="font-mono text-[11px] text-muted-foreground">{dossier.reference}</span>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[11px] text-muted-foreground">{dossier.reference}</span>
+          <VoiceRepliesToggle />
+        </div>
       </div>
 
       <header className="flex items-start gap-3 rounded-2xl border bg-card p-4">
@@ -283,12 +314,15 @@ export function DossierView({ initial }: { initial: DossierDTO }) {
           <section className="rounded-2xl border bg-card p-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-sm font-semibold">Suivi du dossier</h2>
-              {!final && (
-                <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                  <IconLoader2 size={12} className="animate-spin" aria-hidden="true" />
-                  Actualisation auto
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {!final && (
+                  <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <IconLoader2 size={12} className="animate-spin" aria-hidden="true" />
+                    Actualisation auto
+                  </span>
+                )}
+                <SpeakButton text={statusSentence} label="Écouter le statut" />
+              </div>
             </div>
 
             <div className="mt-3 flex items-end justify-between">

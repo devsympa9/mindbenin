@@ -147,6 +147,16 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 - Détection : `POST /detect` (image multipart ou JSON `{ "image": "data:image/jpeg;base64,..." }`)
 - Variable `FACE_SERVICE_URL` dans `apps/api/.env` (vide = mode simulé).
 
+## Commande et réponses vocales
+
+Le parcours parlé fonctionne sans aucune clé API ni service payant :
+
+- **Écoute** : Web Speech API (`SpeechRecognition`, `fr-FR`) via le bouton micro de l'accueil, avec une saisie texte de secours si le navigateur n'expose pas la reconnaissance.
+- **Compréhension** : `apps/web/lib/voice-intent.ts` reconnaît le service (c'est le mot-clé le plus spécifique qui gagne, donc « visite technique » ne tombe plus sur TVM à cause de « voiture ») puis extrait les champs : compteur et montant d'une facture, plaque, catégorie et centre, motif, nombre de copies, adresse, durée de résidence, numéro CNSS et période, numéro et type de pension. Les valeurs sont passées au formulaire par l'URL, l'utilisateur confirme avant l'ouverture.
+- **Réponses** : `apps/web/lib/speech.ts` lit les messages en français — compréhension de la demande, champs détectés, dossier créé, paiement confirmé ou refusé, changement de statut. Un interrupteur « Voix activée / Voix coupée » est présent sur l'accueil et sur le dossier, et un bouton « Écouter le statut » permet de réécouter le résumé à la demande.
+
+Support : Chrome et Edge (voix Google) sont les plus complets ; Safari iOS lit bien mais la reconnaissance est capricieuse, Firefox n'expose pas la reconnaissance. Les voix disponibles dépendent du système. Pour une voix plus naturelle et homogène sur tous les appareils, il suffit de remplacer le corps de `speak()` par un service TTS (ElevenLabs, Azure Speech, Google Cloud TTS) : le reste du code ne change pas.
+
 ## Services disponibles
 
 Tous passent par le même parcours : identité NPI, formulaire pré-rempli, paiement mobile money, suivi jusqu'au retrait.

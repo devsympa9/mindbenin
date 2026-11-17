@@ -6,6 +6,7 @@ import { IconArrowRight, IconLoader2, IconShieldCheck } from "@tabler/icons-reac
 
 import { createDossierAction } from "@/lib/actions"
 import { formatDate, formatFcfa } from "@/lib/format"
+import { speak } from "@/lib/speech"
 import type { ServiceDTO, UserDTO } from "@/lib/types"
 
 export function ServiceForm({
@@ -55,9 +56,16 @@ export function ServiceForm({
 
     if (!result.ok) {
       setError(result.error)
+      speak(result.error)
       setPending(false)
       return
     }
+
+    speak(
+      `Dossier créé. Référence ${result.data.reference.replace(/-/g, " ")}. ${formatFcfa(
+        result.data.totalAmount,
+      )} à payer pour lancer le traitement.`,
+    )
 
     router.push(`/app/dossiers/${result.data.reference}`)
   }

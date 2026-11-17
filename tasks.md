@@ -49,6 +49,9 @@ Suivi de l'implémentation de la démo (Phase 1 du document `project.md`).
 - [x] Accueil app : identité ANIP, commande vocale (Web Speech API + saisie texte), 12 services, dossiers récents.
 - [x] Commande vocale : extraction du numéro de compteur, du montant et de la plaque, pré-remplissage du formulaire de service.
 - [x] Commandes vocales étendues à l'acte de célibat, l'attestation de résidence, la cotisation CNSS et la pension de retraite.
+- [x] Extraction vocale des nouveaux champs : motif, copies, adresse, durée de résidence, numéro CNSS, période de cotisation, numéro et type de pension.
+- [x] Matching par mot-clé le plus spécifique (« visite technique » ne tombe plus sur TVM à cause de « voiture »).
+- [x] Réponses vocales (synthèse Web Speech, français) : compréhension de la demande, dossier créé, paiement, changement de statut ; interrupteur « Voix activée » et bouton « Écouter le statut ».
 - [x] Page service : pré-requis, formulaire pré-rempli, détail officiel + commission, création du dossier.
 - [x] Page dossier : paiement FedaPay, suivi « en attente », barre de progression, timeline, lieu de retrait, reçu, historique.
 - [x] Suivi en direct par polling (3 s) jusqu'au statut « Prêt à récupérer ».

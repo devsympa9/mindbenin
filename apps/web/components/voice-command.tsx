@@ -6,6 +6,17 @@ import { IconArrowRight, IconMicrophone } from "@tabler/icons-react"
 
 import { cn } from "@workspace/ui/lib/utils"
 
+import { speak } from "@/lib/speech"
+import {
+  COMMANDS,
+  detailLabel,
+  extractDetails,
+  matchCommand,
+  type VoiceIntent,
+} from "@/lib/voice-intent"
+
+import { VoiceRepliesToggle } from "./voice-replies"
+
 type SpeechResult = { 0?: { transcript?: string } }
 
 type SpeechRecognitionLike = {
@@ -21,293 +32,30 @@ type SpeechRecognitionLike = {
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
 
-const COMMANDS = [
-  {
-    slug: "passeport",
-    label: "Passeport",
-    keywords: ["passeport", "voyage", "biometrique"],
-  },
-  {
-    slug: "acte-naissance",
-    label: "Acte de naissance",
-    keywords: ["naissance", "extrait", "mairie"],
-  },
-  {
-    slug: "casier-judiciaire",
-    label: "Casier judiciaire",
-    keywords: ["casier", "judiciaire", "bulletin"],
-  },
-  {
-    slug: "impots",
-    label: "Impôts",
-    keywords: ["impot", "taxe", "fiscal", "dgi", "declaration"],
-  },
-  {
-    slug: "tvm",
-    label: "TVM",
-    keywords: ["tvm", "vehicule", "voiture", "carte grise", "taxe vehicule"],
-  },
-  {
-    slug: "visite-technique",
-    label: "Visite technique",
-    keywords: ["visite technique", "controle technique", "technique"],
-  },
-  {
-    slug: "facture-soneb",
-    label: "Facture SONEB",
-    keywords: ["soneb", "eau", "facture eau"],
-  },
-  {
-    slug: "facture-sbee",
-    label: "Facture SBEE",
-    keywords: ["sbee", "electricite", "courant", "facture electricite"],
-  },
-  {
-    slug: "acte-celibat",
-    label: "Acte de célibat",
-    keywords: ["celibat", "celibataire", "certificat de celibat", "acte de celibat"],
-  },
-  {
-    slug: "attestation-residence",
-    label: "Attestation de résidence",
-    keywords: ["residence", "attestation de residence", "domicile", "justificatif de domicile"],
-  },
-  {
-    slug: "cnss-cotisation",
-    label: "Cotisation CNSS",
-    keywords: ["cnss", "cotisation", "securite sociale", "cotisations"],
-  },
-  {
-    slug: "pension-retraite",
-    label: "Pension retraite",
-    keywords: ["pension", "retraite", "retraite cnss"],
-  },
-] as const
-
-const FRENCH_NUMBER_WORDS: Record<string, number> = {
-  zero: 0,
-  un: 1,
-  une: 1,
-  deux: 2,
-  trois: 3,
-  quatre: 4,
-  cinq: 5,
-  six: 6,
-  sept: 7,
-  huit: 8,
-  neuf: 9,
-  dix: 10,
-  onze: 11,
-  douze: 12,
-  treize: 13,
-  quatorze: 14,
-  quinze: 15,
-  seize: 16,
-  dixsept: 17,
-  dixhuit: 18,
-  dixneuf: 19,
-  vingt: 20,
-  trente: 30,
-  quarante: 40,
-  cinquante: 50,
-  soixante: 60,
-  "quatre-vingt": 80,
-  "quatre-vingts": 80,
-  cent: 100,
-  mille: 1000,
-}
-
-function parseFrenchNumberWords(input: string): number | null {
-  const tokens = normalize(input)
-    .split(/\s+/)
-    .filter(Boolean)
-
-  let total = 0
-  let current = 0
-  let hasNumber = false
-
-  for (const token of tokens) {
-    if (FRENCH_NUMBER_WORDS[token] !== undefined) {
-      current += FRENCH_NUMBER_WORDS[token]
-      hasNumber = true
-      continue
-    }
-
-    if (token === "cent" || token === "cents" || token === "cent.") {
-      if (current === 0) current = 1
-      current *= 100
-      continue
-    }
-
-    if (token === "mille" || token === "milles") {
-      if (current === 0) current = 1
-      total += current * 1000
-      current = 0
-      continue
-    }
-
-    if (token === "million" || token === "millions") {
-      if (current === 0) current = 1
-      total += current * 1000000
-      current = 0
-      continue
-    }
-  }
-
-  total += current
-  return hasNumber ? total : null
-}
-
-function normalize(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-}
-
-function findSelectOption(text: string, options: readonly string[]): string | undefined {
-  const normalizedText = normalize(text)
-  const direct = options.find((option) => normalizedText.includes(normalize(option)))
-  if (direct) return direct
-
-  const keywords: Record<string, string> = {
-    voiture: "Voiture particulière",
-    moto: "Moto",
-    camion: "Camion",
-    utilitaire: "Utilitaire",
-    cotonou: "Cotonou",
-    portonovo: "Porto-Novo",
-    parakou: "Parakou",
-    abomey: "Abomey-Calavi",
-    calavi: "Abomey-Calavi",
-  }
-
-  for (const [keyword, option] of Object.entries(keywords)) {
-    if (normalizedText.includes(keyword) && options.includes(option)) return option
-  }
-
-  if (normalizedText.includes("10")) {
-    const ten = options.find((option) => option.includes("10 CV"))
-    if (ten) return ten
-  }
-  if (/[789]/.test(normalizedText)) {
-    const mid = options.find((option) => option.includes("7 à 9"))
-    if (mid) return mid
-  }
-  if (/[456]/.test(normalizedText)) {
-    const low = options.find((option) => option.includes("4 à 6"))
-    if (low) return low
-  }
-
-  return undefined
-}
-
-function extractDetails(slug: string, text: string): Record<string, string> {
-  const details: Record<string, string> = {}
-
-  if (slug === "facture-soneb" || slug === "facture-sbee") {
-    const meterFromKeyword = text.match(
-      /(?:num[eé]ro|compteur|facture)\s*(?:de\s*(?:facture|compteur))?\s*[:=]?\s*([0-9][0-9\s.,-]{4,})/i,
-    )?.[1]?.replace(/[^0-9]/g, "")
-
-    const amountDigitMatch = text.match(
-      /(?:montant|a payer|payer|somme)\s*(?:de\s*la\s*facture)?\s*[:=]?\s*([0-9][0-9\s.,]*)/i,
-    )?.[1]?.replace(/[^0-9]/g, "")
-
-    const amountKeywordIndex = normalize(text).search(/montant|a payer|payer|somme/)
-    const amountSegment =
-      amountKeywordIndex >= 0 ? text.slice(amountKeywordIndex) : text
-    const amountWordMatch = parseFrenchNumberWords(amountSegment)
-    const amountFromKeyword = amountDigitMatch || (amountWordMatch ? String(amountWordMatch) : undefined)
-
-    const groups =
-      text
-        .match(/\d[\d\s.,]*/g)
-        ?.map((group) => group.replace(/[^0-9]/g, ""))
-        .filter((group) => group.length > 0) ?? []
-
-    let meter = meterFromKeyword
-    let amount = amountFromKeyword
-
-    if (!meter && groups.length > 0) {
-      meter = groups.reduce((best, current) =>
-        current.length >= best.length ? current : best,
-      )
-    }
-
-    if (!amount && groups.length > 1) {
-      const candidates = groups.filter((group) => group !== meter)
-      if (candidates.length > 0) {
-        amount = candidates.reduce((best, current) =>
-          current.length <= best.length ? current : best,
-        )
-      }
-    }
-
-    if (meter && amount && meter === amount && groups.length > 1) {
-      const sorted = [...groups].sort((a, b) => b.length - a.length)
-      meter = sorted[0]
-      amount = sorted[sorted.length - 1]
-    }
-
-    if (meter) details.numeroFacture = meter
-    if (amount) details.montantFacture = amount
-  }
-
-  if (slug === "visite-technique" || slug === "tvm") {
-    const plate = text.match(/\b([a-zA-Z]{2}\s?\d{3,4}\s?[a-zA-Z]{2})\b/)?.[1]
-    if (plate) details.immatriculation = plate.replace(/\s+/g, " ").trim().toUpperCase()
-
-    const vehicleField = slug === "tvm" ? "categorieVehicule" : "typeVehicule"
-    const serviceFields =
-      slug === "tvm"
-        ? ["Voiture particulière", "Utilitaire", "Moto", "Camion"]
-        : ["Voiture particulière", "Utilitaire", "Moto", "Camion"]
-    const vehicleOption = findSelectOption(text, serviceFields)
-    if (vehicleOption) details[vehicleField] = vehicleOption
-
-    if (slug === "tvm") {
-      const powerOption = findSelectOption(text, ["4 à 6 CV", "7 à 9 CV", "10 CV et plus"])
-      if (powerOption) details.puissanceFiscale = powerOption
-    } else {
-      const centreOption = findSelectOption(text, ["Cotonou", "Porto-Novo", "Parakou", "Abomey-Calavi"])
-      if (centreOption) details.centre = centreOption
-    }
-  }
-
-  return details
-}
-
-function matchCommand(value: string) {
-  const text = normalize(value)
-  return COMMANDS.find((command) =>
-    command.keywords.some((keyword) => text.includes(normalize(keyword))),
-  )
-}
-
 export function VoiceCommand() {
   const router = useRouter()
   const [listening, setListening] = useState(false)
   const [transcript, setTranscript] = useState("")
   const [message, setMessage] = useState<string | null>(null)
   const [manual, setManual] = useState("")
-  const [pendingCommand, setPendingCommand] = useState<{
-    slug: string
-    label: string
-    details: Record<string, string>
-  } | null>(null)
+  const [pendingCommand, setPendingCommand] = useState<VoiceIntent | null>(null)
+
+  function announce(text: string) {
+    setMessage(text)
+    speak(text)
+  }
 
   function navigate(slug: string, label: string, details: Record<string, string> = {}) {
     const params = new URLSearchParams(details)
     const query = params.toString()
-    setMessage(
+    announce(
       Object.keys(details).length > 0
-        ? `Je lance : ${label} avec les informations détectées.`
-        : `Je lance : ${label}`,
+        ? `Je lance ${label} avec les informations détectées.`
+        : `Je lance ${label}.`,
     )
     window.setTimeout(
       () => router.push(`/app/services/${slug}${query ? `?${query}` : ""}`),
-      500,
+      900,
     )
   }
 
@@ -322,7 +70,7 @@ export function VoiceCommand() {
     const Recognition = globalWindow.SpeechRecognition ?? globalWindow.webkitSpeechRecognition
 
     if (!Recognition) {
-      setMessage(
+      announce(
         "La reconnaissance vocale n'est pas disponible ici. Écris ta demande ci-dessous.",
       )
       return
@@ -349,17 +97,18 @@ export function VoiceCommand() {
       if (command) {
         const details = extractDetails(command.slug, finalTranscript)
         setPendingCommand({ slug: command.slug, label: command.label, details })
-        setMessage(
-          Object.keys(details).length > 0
-            ? `J'ai compris : ${command.label}. Informations détectées : ${Object.entries(
-                details,
-              )
-                .map(([key, value]) => `${key} = ${value}`)
-                .join(", ")}. Confirme ou annule.`
+
+        const detected = Object.entries(details)
+          .map(([key, value]) => `${detailLabel(key)} : ${value}`)
+          .join(". ")
+
+        announce(
+          detected
+            ? `J'ai compris : ${command.label}. ${detected}. Confirme ou annule.`
             : `J'ai compris : ${command.label}. Confirme ou annule.`,
         )
       } else if (finalTranscript.trim()) {
-        setMessage(
+        announce(
           "Je n'ai pas reconnu. Essaie « passeport », « TVM », « visite technique », « facture SONEB », « acte de célibat » ou « cotisation CNSS ».",
         )
       }
@@ -367,14 +116,14 @@ export function VoiceCommand() {
 
     recognition.onerror = () => {
       setListening(false)
-      setMessage("Micro indisponible. Tu peux écrire ta demande.")
+      announce("Micro indisponible. Tu peux écrire ta demande.")
     }
 
     try {
       recognition.start()
       setListening(true)
     } catch {
-      setMessage("Le micro est déjà en écoute. Réessaie dans un instant.")
+      announce("Le micro est déjà en écoute. Réessaie dans un instant.")
     }
   }
 
@@ -384,7 +133,7 @@ export function VoiceCommand() {
     const command = matchCommand(manual)
 
     if (!command) {
-      setMessage(
+      announce(
         "Je n'ai pas reconnu. Essaie « passeport », « TVM », « visite technique », « facture SONEB », « acte de célibat » ou « cotisation CNSS ».",
       )
       return
@@ -406,6 +155,8 @@ export function VoiceCommand() {
           IA vocale
         </span>
       </div>
+
+      <VoiceRepliesToggle className="mt-2" />
 
       <div className="mt-5 flex items-center gap-4">
         <button
@@ -462,7 +213,7 @@ export function VoiceCommand() {
             type="button"
             onClick={() => {
               setPendingCommand(null)
-              setMessage("Annulé.")
+              announce("Annulé. Dis-moi ce que tu veux faire.")
             }}
             className="rounded-lg border bg-background px-3 py-1.5 text-xs font-medium transition hover:border-primary/40"
           >
