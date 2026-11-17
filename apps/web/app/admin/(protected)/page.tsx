@@ -1,7 +1,9 @@
 import {
   IconArrowRight,
+  IconBell,
   IconCheck,
   IconClock,
+  IconDownload,
   IconFiles,
   IconSearch,
   IconWallet,
@@ -92,14 +94,23 @@ export default async function AdminDashboardPage({
 
   return (
     <div className="space-y-5">
-      <header>
-        <h1 className="text-lg font-semibold tracking-tight">File de traitement</h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Tous les dossiers citoyens, du paiement au retrait.
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">File de traitement</h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Tous les dossiers citoyens, du paiement au retrait.
+          </p>
+        </div>
+
+        <a
+          href={`/api/admin/export?${query.toString()}`}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[11px] font-medium transition hover:border-primary/40 hover:text-primary"
+        >
+          <IconDownload size={14} aria-hidden="true" /> Exporter en CSV
+        </a>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           label="Dossiers"
           value={stats.total}
@@ -123,6 +134,12 @@ export default async function AdminDashboardPage({
           value={formatFcfa(stats.revenue)}
           hint="paiements confirmés"
           icon={<IconWallet size={15} aria-hidden="true" />}
+        />
+        <StatCard
+          label="Notifications"
+          value={stats.notificationsFailed}
+          hint="en échec à retenter"
+          icon={<IconBell size={15} aria-hidden="true" />}
         />
       </div>
 

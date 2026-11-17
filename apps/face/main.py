@@ -92,6 +92,95 @@ class DetectRequest(BaseModel):
     image: str
 
 
+def decode_base64(encoded: str) -> np.ndarray:
+    if "," in encoded:
+        encoded = encoded.split(",", 1)[1]
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="Image base64 invalide.") from exc
+    return decode_image(raw)
+
+
+def liveness_metrics(frames: list[np.ndarray]) -> dict:
+    """Heuristiques anti-photo : mouvement réel + netteté + taille du visage.
+
+    Une photo imprimée ou un écran tenu devant la caméra produit des images
+    quasi identiques (mouvement nul) ou anormalement lisses (peu de détail
+    haute fréquence). Ces mesures ne remplacent pas un anti-spoofing ML, mais
+    elles bloquent les attaques naïves sans dépendance supplémentaire.
+    """
+    grays = []
+    for frame in frames:
+        small = cv2.resize(frame, (160, 120))
+        grays.append(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY).astype(np.float32))
+
+    diffs = [
+        float(np.mean(np.abs(grays[index] - grays[index - 1])))
+        for index in range(1, len(grays))
+    ]
+    motion = max(diffs) if diffs else 0.0
+
+    last = grays[-1]
+    # Certaines builds OpenCV 5 refusent Laplacian(CV_32F -> CV_64F) : on part
+    # du gris 8 bits, ce qui correspond aussi au calcul de netteté classique.
+    sharpness = float(cv2.Laplacian(last.astype(np.uint8), cv2.CV_64F).var())
+
+    detection = detect_faces(frames[-1])
+    face_ratio = 0.0
+    if detection["boundingBoxes"]:
+        box = detection["boundingBoxes"][0]
+        area = box["width"] * box["height"]
+        face_ratio = area / float(frames[-1].shape[0] * frames[-1].shape[1])
+
+    score = min(1.0, motion / 6.0) * 0.45 + min(1.0, sharpness / 120.0) * 0.4 + min(
+        1.0, face_ratio / 0.18
+    ) * 0.15
+
+    reason = None
+    if not detection["faceDetected"]:
+        reason = "Aucun visage détecté sur la dernière image."
+    elif motion < 1.2:
+        reason = "Aucun mouvement détecté : bouge légèrement la tête pendant le scan."
+    elif sharpness < 8:
+        reason = "Image trop lisse ou floue : utilise un vrai visage, pas une photo."
+    elif face_ratio < 0.03:
+        reason = "Rapproche-toi de la caméra."
+
+    return {
+        "faceDetected": detection["faceDetected"],
+        "faceCount": detection["faceCount"],
+        "motion": round(motion, 3),
+        "sharpness": round(sharpness, 3),
+        "faceRatio": round(face_ratio, 4),
+        "livenessScore": round(score, 3),
+        "passed": reason is None,
+        "reason": reason,
+    }
+
+
+@app.post("/liveness")
+async def liveness(request: Request):
+    try:
+        body = await request.json()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="Corps JSON invalide.") from exc
+
+    frames = body.get("frames") if isinstance(body, dict) else None
+
+    if not isinstance(frames, list) or len(frames) < 2:
+        raise HTTPException(status_code=400, detail="Au moins deux images sont requises.")
+
+    decoded = [decode_base64(frame) for frame in frames[:5]]
+
+    try:
+        return liveness_metrics(decoded)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Echec de l'analyse : {exc}") from exc
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "mindbenin-face", "model": Path(MODEL_PATH).name}

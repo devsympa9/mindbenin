@@ -1,13 +1,17 @@
 import {
   IconArrowLeft,
+  IconDownload,
+  IconFileText,
   IconMapPin,
   IconPhone,
+  IconQrcode,
   IconReceipt2,
   IconUser,
 } from "@tabler/icons-react"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
+import { PickupForm } from "@/components/admin/pickup-form"
 import { StatusForm } from "@/components/admin/status-form"
 import { ServiceIcon } from "@/components/service-icon"
 import { StatusPill } from "@/components/status-pill"
@@ -155,6 +159,39 @@ export default async function AdminDossierPage({
           </section>
 
           <section className="rounded-2xl border bg-card p-4">
+            <h2 className="flex items-center gap-2 text-xs font-semibold">
+              <IconFileText size={15} className="text-primary" aria-hidden="true" /> Pièces
+              justificatives
+            </h2>
+
+            {(dossier.documents ?? []).length === 0 ? (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Aucune pièce déposée par le citoyen.
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-1.5">
+                {(dossier.documents ?? []).map((document) => (
+                  <li key={document.id}>
+                    <a
+                      href={`/api/admin/documents/${encodeURIComponent(dossier.reference)}/${document.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-2 rounded-lg bg-secondary/60 px-2.5 py-2 text-[11px] transition hover:text-primary"
+                    >
+                      <IconFileText size={13} aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate">{document.name}</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {Math.round(document.size / 1024)} Ko
+                      </span>
+                      <IconDownload size={13} aria-hidden="true" />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="rounded-2xl border bg-card p-4">
             <h2 className="text-xs font-semibold">Historique</h2>
             <ol className="mt-3 space-y-3">
               {dossier.events.map((event) => (
@@ -224,7 +261,21 @@ export default async function AdminDossierPage({
                 Prêt depuis le {formatDateTime(dossier.readyAt)}
               </p>
             )}
+
+            {dossier.procuration?.active && (
+              <p className="mt-2 flex items-start gap-1 rounded-lg bg-secondary/60 p-2 text-[10px] leading-relaxed text-muted-foreground">
+                <IconQrcode size={12} className="mt-0.5 shrink-0" aria-hidden="true" />
+                Mandataire : {dossier.procuration.holderName} ·{" "}
+                {dossier.procuration.holderPhone} · code {dossier.procuration.code}
+              </p>
+            )}
           </section>
+
+          <PickupForm
+            reference={dossier.reference}
+            procurationCode={dossier.procuration?.active ? dossier.procuration.code : null}
+            disabled={dossier.status !== "PRET_A_RECUPERER"}
+          />
         </aside>
       </div>
     </div>

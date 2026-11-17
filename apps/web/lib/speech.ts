@@ -47,23 +47,26 @@ export function stopSpeaking() {
  * Lit un texte à voix haute en français.
  * `force` ignore la préférence utilisateur (bouton « Écouter » explicite).
  */
-export function speak(text: string, options: { force?: boolean } = {}) {
+export function speak(text: string, options: { force?: boolean; lang?: string } = {}) {
   if (!text || !speechSupported()) return
   if (!options.force && !isVoiceReplyEnabled()) return
 
   const synth = window.speechSynthesis
   synth.cancel()
 
+  const lang = options.lang ?? "fr-FR"
   const utterance = new window.SpeechSynthesisUtterance(text)
-  utterance.lang = "fr-FR"
+  utterance.lang = lang
   utterance.rate = 1.02
   utterance.pitch = 1
 
-  const frenchVoice = synth
-    .getVoices()
-    .find((voice) => voice.lang.toLowerCase().startsWith("fr"))
-  if (frenchVoice) {
-    utterance.voice = frenchVoice
+  const prefix = lang.slice(0, 2).toLowerCase()
+  const voice =
+    synth.getVoices().find((candidate) => candidate.lang.toLowerCase() === lang.toLowerCase()) ??
+    synth.getVoices().find((candidate) => candidate.lang.toLowerCase().startsWith(prefix))
+
+  if (voice) {
+    utterance.voice = voice
   }
 
   synth.speak(utterance)

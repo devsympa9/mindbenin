@@ -5,6 +5,15 @@ export type FaceDetectionResult = {
   faceCount: number
 }
 
+export type LivenessResult = FaceDetectionResult & {
+  motion: number
+  sharpness: number
+  faceRatio: number
+  livenessScore: number
+  passed: boolean
+  reason: string | null
+}
+
 @Injectable()
 export class FaceVerificationService {
   private readonly logger = new Logger(FaceVerificationService.name)
@@ -14,6 +23,15 @@ export class FaceVerificationService {
   }
 
   async detect(image: string): Promise<FaceDetectionResult> {
+    return this.call<FaceDetectionResult>("/detect", { image })
+  }
+
+  /** Analyse multi-images : mouvement, netteté et taille du visage (anti-photo). */
+  async checkLiveness(frames: string[]): Promise<LivenessResult> {
+    return this.call<LivenessResult>("/liveness", { frames })
+  }
+
+  private async call<T>(path: string, body: Record<string, unknown>): Promise<T> {
     const baseUrl = (process.env.FACE_SERVICE_URL ?? "").trim().replace(/\/$/, "")
 
     if (!baseUrl) {
@@ -21,13 +39,13 @@ export class FaceVerificationService {
     }
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 10_000)
+    const timeout = setTimeout(() => controller.abort(), 15_000)
 
     try {
-      const response = await fetch(`${baseUrl}/detect`, {
+      const response = await fetch(`${baseUrl}${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ image }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       })
 
@@ -37,12 +55,7 @@ export class FaceVerificationService {
         throw new ServiceUnavailableException("Service facial indisponible.")
       }
 
-      const payload = (await response.json()) as { faceDetected?: unknown; faceCount?: unknown }
-
-      return {
-        faceDetected: Boolean(payload.faceDetected),
-        faceCount: Number(payload.faceCount ?? 0),
-      }
+      return (await response.json()) as T
     } catch (error) {
       if (error instanceof ServiceUnavailableException) {
         throw error

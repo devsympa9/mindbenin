@@ -67,6 +67,74 @@ export async function adminUpdateStatusAction(
   }
 }
 
+export async function adminCollectAction(
+  reference: string,
+  code: string,
+  target: "DOSSIER" | "PROCURATION" = "DOSSIER",
+): Promise<AdminActionResult<{ reference: string; status: string; collectedAt: string }>> {
+  const token = await getAdminToken()
+
+  if (!token) {
+    return { ok: false, error: "Session administrateur expirée. Reconnecte-toi." }
+  }
+
+  try {
+    const result = await apiFetch<{ reference: string; status: string; collectedAt: string }>(
+      `/admin/dossiers/${encodeURIComponent(reference)}/pickup`,
+      { method: "POST", token, body: { code, target } },
+    )
+
+    revalidatePath("/admin")
+    revalidatePath(`/admin/dossiers/${reference}`)
+
+    return { ok: true, data: result }
+  } catch (error) {
+    return { ok: false, error: toErrorMessage(error) }
+  }
+}
+
+export async function adminRunRemindersAction(): Promise<
+  AdminActionResult<{ candidates: number; sent: number }>
+> {
+  const token = await getAdminToken()
+
+  if (!token) {
+    return { ok: false, error: "Session administrateur expirée. Reconnecte-toi." }
+  }
+
+  try {
+    const result = await apiFetch<{ candidates: number; sent: number }>(
+      "/admin/reminders/run",
+      { method: "POST", token },
+    )
+    revalidatePath("/admin/notifications")
+    return { ok: true, data: result }
+  } catch (error) {
+    return { ok: false, error: toErrorMessage(error) }
+  }
+}
+
+export async function adminRetryNotificationsAction(): Promise<
+  AdminActionResult<{ retried: number }>
+> {
+  const token = await getAdminToken()
+
+  if (!token) {
+    return { ok: false, error: "Session administrateur expirée. Reconnecte-toi." }
+  }
+
+  try {
+    const result = await apiFetch<{ retried: number }>("/admin/notifications/retry", {
+      method: "POST",
+      token,
+    })
+    revalidatePath("/admin/notifications")
+    return { ok: true, data: result }
+  } catch (error) {
+    return { ok: false, error: toErrorMessage(error) }
+  }
+}
+
 export async function adminLogoutAction(): Promise<void> {
   const store = await cookies()
   store.delete(ADMIN_COOKIE)

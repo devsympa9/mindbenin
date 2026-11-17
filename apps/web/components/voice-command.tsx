@@ -6,11 +6,15 @@ import { IconArrowRight, IconMicrophone } from "@tabler/icons-react"
 
 import { cn } from "@workspace/ui/lib/utils"
 
+import { latestDossierAction } from "@/lib/actions"
+import { formatFcfa } from "@/lib/format"
+import { getLocale, phrase, SPEECH_LANG, statusLabel } from "@/lib/i18n"
 import { speak } from "@/lib/speech"
 import {
   COMMANDS,
   detailLabel,
   extractDetails,
+  isStatusQuery,
   matchCommand,
   type VoiceIntent,
 } from "@/lib/voice-intent"
@@ -41,8 +45,28 @@ export function VoiceCommand() {
   const [pendingCommand, setPendingCommand] = useState<VoiceIntent | null>(null)
 
   function announce(text: string) {
+    const locale = getLocale()
     setMessage(text)
-    speak(text)
+    speak(text, { lang: SPEECH_LANG[locale] })
+  }
+
+  /** « Où est mon dossier ? » : lit le dernier dossier à voix haute. */
+  async function answerStatus() {
+    const locale = getLocale()
+    const result = await latestDossierAction()
+
+    if (!result.ok || !result.data) {
+      announce(phrase(locale, "notFound"))
+      return
+    }
+
+    const dossier = result.data
+    announce(
+      `${dossier.service.name}. ${phrase(locale, "statusUpdated", {
+        reference: dossier.reference.replace(/-/g, " "),
+        status: statusLabel(locale, dossier.status),
+      })} ${formatFcfa(dossier.totalAmount)}.`,
+    )
   }
 
   function navigate(slug: string, label: string, details: Record<string, string> = {}) {
@@ -93,6 +117,12 @@ export function VoiceCommand() {
 
     recognition.onend = () => {
       setListening(false)
+
+      if (isStatusQuery(finalTranscript)) {
+        void answerStatus()
+        return
+      }
+
       const command = matchCommand(finalTranscript)
       if (command) {
         const details = extractDetails(command.slug, finalTranscript)
@@ -129,6 +159,11 @@ export function VoiceCommand() {
 
   function handleManualSubmit(event: React.FormEvent) {
     event.preventDefault()
+
+    if (isStatusQuery(manual)) {
+      void answerStatus()
+      return
+    }
 
     const command = matchCommand(manual)
 

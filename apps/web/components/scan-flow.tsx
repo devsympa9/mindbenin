@@ -36,7 +36,10 @@ export function ScanFlow() {
   const [phase, setPhase] = useState<"idle" | "scanning" | "done">("idle")
   const [step, setStep] = useState(0)
   const [user, setUser] = useState<UserDTO | null>(null)
-  const [scanMeta, setScanMeta] = useState<{ faceVerified: boolean; simulated: boolean } | null>(null)
+  const [scanMeta, setScanMeta] = useState<{
+    faceVerified: boolean
+    simulated: boolean
+  } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
@@ -108,6 +111,19 @@ export function ScanFlow() {
     return canvas.toDataURL("image/jpeg", 0.82)
   }
 
+  /** Trois prises espacées : le service facial mesure le mouvement réel. */
+  async function captureFrames(count = 3): Promise<string[]> {
+    const frames: string[] = []
+
+    for (let index = 0; index < count; index += 1) {
+      const frame = capturePhoto()
+      if (frame) frames.push(frame)
+      await wait(340)
+    }
+
+    return frames
+  }
+
   async function startScan() {
     setPhase("scanning")
     setError(null)
@@ -115,14 +131,15 @@ export function ScanFlow() {
     setScanMeta(null)
     setStep(0)
 
-    const image = capturePhoto()
+    const frames = cameraActive ? await captureFrames(3) : []
+    const image = frames[frames.length - 1] ?? capturePhoto()
 
-    await wait(600)
+    await wait(400)
     setStep(1)
     await wait(700)
     setStep(2)
 
-    const result = await scanIdentityAction(image ?? undefined)
+    const result = await scanIdentityAction(image ?? undefined, frames)
 
     if (!result.ok) {
       setError(result.error)
@@ -292,8 +309,8 @@ export function ScanFlow() {
 
       <p className="text-center text-[10px] leading-relaxed text-muted-foreground">
         {scanMeta?.faceVerified
-          ? "Visage vérifié par le service facial Python (MediaPipe). L'identité ANIP reste simulée en attendant l'accord d'accès."
-          : "Démo : l'ANIP est simulée. Active la caméra et le service facial (apps/face) pour un scan réel du visage."}
+          ? "Visage vérifié par le service facial Python (MediaPipe) avec contrôle de présence : trois prises espacées, mouvement et netteté analysés. Une photo statique est refusée."
+          : "Démo : l'ANIP est simulée. Active la caméra et le service facial (apps/face) pour un scan réel du visage avec contrôle de présence."}
       </p>
     </div>
   )

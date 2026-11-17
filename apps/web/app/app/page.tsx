@@ -7,6 +7,8 @@ import { requireUser } from "@/lib/session"
 import type { DossierDTO, ServiceDTO } from "@/lib/types"
 
 import { Avatar } from "@/components/avatar"
+import { LocaleSwitcher } from "@/components/locale-switcher"
+import { NotificationFeed } from "@/components/notification-feed"
 import { ServiceCard } from "@/components/service-card"
 import { StatusPill } from "@/components/status-pill"
 import { VoiceCommand } from "@/components/voice-command"
@@ -25,12 +27,17 @@ export default async function AppHomePage() {
 
   return (
     <div className="space-y-6">
-      <section>
-        <p className="text-sm text-muted-foreground">Bonjour</p>
-        <h1 className="text-xl font-semibold tracking-tight">
-          {user.firstName} {user.lastName}
-        </h1>
+      <section className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm text-muted-foreground">Bonjour</p>
+          <h1 className="text-xl font-semibold tracking-tight">
+            {user.firstName} {user.lastName}
+          </h1>
+        </div>
+        <LocaleSwitcher />
       </section>
+
+      <NotificationFeed />
 
       <section className="flex items-center gap-3 rounded-2xl border bg-gradient-to-br from-primary/10 via-card to-card p-4">
         <Avatar firstName={user.firstName} lastName={user.lastName} size="lg" />
@@ -49,6 +56,10 @@ export default async function AppHomePage() {
       </section>
 
       <VoiceCommand />
+
+      <p className="text-center text-[10px] leading-relaxed text-muted-foreground">
+        Dis aussi « où est mon dossier ? » pour entendre le statut de ta dernière démarche.
+      </p>
 
       <section>
         <div className="flex items-end justify-between gap-3">

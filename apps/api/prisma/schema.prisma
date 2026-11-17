@@ -20,6 +20,9 @@ model User {
   verifiedAt DateTime  @default(now())
   createdAt  DateTime  @default(now())
   dossiers   Dossier[]
+
+  livenessScore     Float?
+  livenessCheckedAt DateTime?
 }
 
 model Service {
@@ -56,12 +59,19 @@ model Dossier {
   pickupLocation String
   readyAt        DateTime?
   manualOverride Boolean       @default(false)
+  pickupCode     String?
+  collectedAt    DateTime?
+  reminderSentAt DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   events         DossierEvent[]
   payment        Payment?
+  documents      Document[]
+  notifications  Notification[]
+  procuration    Procuration?
 
   @@index([userId, createdAt])
+  @@index([status, reminderSentAt])
 }
 
 enum DossierStatus {
@@ -109,4 +119,74 @@ enum PaymentStatus {
   EN_ATTENTE
   REUSSI
   ECHOUE
+}
+
+model Document {
+  id         String   @id @default(cuid())
+  dossierId  String
+  dossier    Dossier  @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+  name       String
+  mimeType   String
+  size       Int
+  storageKey String   @unique
+  driver     String   @default("local")
+  createdAt  DateTime @default(now())
+
+  @@index([dossierId])
+}
+
+enum NotificationChannel {
+  SMS
+  WHATSAPP
+}
+
+enum NotificationStatus {
+  EN_ATTENTE
+  ENVOYE
+  SIMULE
+  ECHEC
+}
+
+model Notification {
+  id        String             @id @default(cuid())
+  dossierId String?
+  dossier   Dossier?           @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+  userId    String?
+  channel   NotificationChannel
+  recipient String
+  title     String
+  body      String
+  status    NotificationStatus  @default(EN_ATTENTE)
+  provider  String?
+  error     String?
+  sentAt    DateTime?
+  readAt    DateTime?
+  createdAt DateTime           @default(now())
+
+  @@index([dossierId])
+  @@index([userId, createdAt])
+}
+
+model Procuration {
+  id             String    @id @default(cuid())
+  dossierId      String    @unique
+  dossier        Dossier   @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+  holderName     String
+  holderPhone    String
+  holderIdNumber String
+  code           String
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+}
+
+model AdminAudit {
+  id        String   @id @default(cuid())
+  actor     String
+  role      String
+  action    String
+  target    String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }

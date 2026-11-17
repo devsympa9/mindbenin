@@ -57,12 +57,19 @@ export class FedapayService {
     const callbackUrl = new URL(this.callbackUrl)
     callbackUrl.searchParams.set("reference", input.merchantReference)
 
-    const transaction = await this.request<FedapayTransaction>("/transactions", "POST", {
+    // FedaPay refuse deux transactions avec la même `merchant_reference` :
+    // on la rend unique par tentative pour autoriser un nouvel essai après un
+    // échec, tout en gardant le dossier dans `custom_metadata` et le callback.
+    const merchantReference = `${input.merchantReference}-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 6)}`
+
+    const payload = await this.request<FedapayTransaction>("/transactions", "POST", {
       description: input.description,
       amount: input.amount,
       currency: { iso: "XOF" },
       callback_url: callbackUrl.toString(),
-      merchant_reference: input.merchantReference,
+      merchant_reference: merchantReference,
       custom_metadata: { dossier: input.merchantReference },
       customer: {
         firstname: input.customer.firstName,
@@ -75,9 +82,14 @@ export class FedapayService {
       },
     })
 
+    // FedaPay v1 répond dans une enveloppe JSON:API : {"v1/transaction": {...}}.
+    const transaction = this.unwrapTransaction(payload)
     const transactionId = transaction.id ? String(transaction.id) : null
 
     if (!transactionId) {
+      this.logger.error(
+        `Réponse FedaPay sans identifiant de transaction (clés : ${Object.keys(payload ?? {}).join(", ")})`,
+      )
       throw new ServiceUnavailableException(
         "FedaPay n'a pas renvoyé d'identifiant de transaction.",
       )
@@ -101,10 +113,27 @@ export class FedapayService {
 
   /** Récupère l'état réel de la transaction côté FedaPay (source de vérité). */
   async retrieve(transactionId: string): Promise<FedapayTransaction> {
-    return this.request<FedapayTransaction>(
+    const payload = await this.request<FedapayTransaction>(
       `/transactions/${encodeURIComponent(transactionId)}`,
       "GET",
     )
+
+    return this.unwrapTransaction(payload)
+  }
+
+  /**
+   * Les réponses FedaPay v1 enveloppent l'objet : `{ "v1/transaction": {…} }`.
+   * On accepte aussi l'objet nu pour rester tolérant aux évolutions de l'API.
+   */
+  private unwrapTransaction(payload: FedapayTransaction | null): FedapayTransaction {
+    const record = (payload ?? {}) as Record<string, unknown>
+    const inner = record["v1/transaction"] ?? record.transaction
+
+    if (inner && typeof inner === "object") {
+      return inner as FedapayTransaction
+    }
+
+    return record as FedapayTransaction
   }
 
   private async request<T>(

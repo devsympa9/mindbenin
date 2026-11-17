@@ -17,18 +17,36 @@ export class IdentityService {
     private readonly face: FaceVerificationService,
   ) {}
 
-  async scan(image?: string) {
+  async scan(image?: string, frames?: string[]) {
+    const usableFrames = (frames ?? []).filter(
+      (frame): frame is string => typeof frame === "string" && frame.length > 100,
+    )
     const hasImage = typeof image === "string" && image.trim().length > 0
-    let simulated = !hasImage || !this.face.enabled
+    const hasFrames = usableFrames.length >= 2
+    let simulated = (!hasImage && !hasFrames) || !this.face.enabled
+    let livenessScore: number | null = null
 
-    if (hasImage && this.face.enabled) {
+    if ((hasImage || hasFrames) && this.face.enabled) {
       try {
-        const result = await this.face.detect(image as string)
+        if (hasFrames) {
+          const liveness = await this.face.checkLiveness(usableFrames)
 
-        if (!result.faceDetected) {
-          throw new BadRequestException(
-            "Aucun visage détecté. Repositionne-toi face à la caméra et réessaie.",
-          )
+          if (!liveness.passed) {
+            throw new BadRequestException(
+              liveness.reason ??
+                "Vérification de présence échouée. Refais le scan avec ton vrai visage, sans photo.",
+            )
+          }
+
+          livenessScore = liveness.livenessScore
+        } else {
+          const result = await this.face.detect(image as string)
+
+          if (!result.faceDetected) {
+            throw new BadRequestException(
+              "Aucun visage détecté. Repositionne-toi face à la caméra et réessaie.",
+            )
+          }
         }
       } catch (error) {
         if (error instanceof BadRequestException) {
@@ -44,7 +62,9 @@ export class IdentityService {
     const user = await this.prisma.user.create({
       data: {
         ...identity,
-        photoSeed: hasImage && !simulated ? "camera" : identity.photoSeed,
+        photoSeed: (hasImage || hasFrames) && !simulated ? "camera" : identity.photoSeed,
+        livenessScore,
+        livenessCheckedAt: livenessScore !== null ? new Date() : null,
       },
     })
 
@@ -53,8 +73,9 @@ export class IdentityService {
     return {
       token,
       user: publicUser(user),
-      faceVerified: hasImage && !simulated,
+      faceVerified: (hasImage || hasFrames) && !simulated,
       simulated,
+      livenessScore,
     }
   }
 

@@ -3,11 +3,31 @@ import type { Prisma } from "@prisma/client"
 
 import { toDossierDTO } from "../common/dossier-serialize"
 import { isValidBeninPhone, normalizePhone } from "../common/phone"
+import { buildReceiptPdf } from "../common/receipt-pdf"
 import { parseServiceFields } from "../common/service-fields"
 import { FedapayService } from "../fedapay/fedapay.service"
+import { NotificationsService } from "../notifications/notifications.service"
 import { PrismaService } from "../prisma/prisma.service"
+import { PickupService } from "./pickup.service"
 
-const INCLUDE = { service: true, payment: true, events: true, user: true } as const
+const INCLUDE = {
+  service: true,
+  payment: true,
+  events: true,
+  user: true,
+  documents: true,
+  procuration: true,
+} as const
+
+const STATUS_NOTIFICATIONS: Record<string, string> = {
+  IDENTITE_VERIFIEE:
+    "Identité vérifiée. Ton dossier entre en traitement : tu recevras un message à chaque étape.",
+  EN_COURS_TRAITEMENT: "Ton dossier est en cours de traitement par l'administration.",
+  PRET_A_RECUPERER:
+    "Ton document est prêt. Présente le QR de retrait de ton dossier au guichet, muni de ton NPI.",
+  RECUPERE: "Document retiré. Merci d'avoir utilisé MindBenin.",
+  ANNULE: "Ton dossier a été annulé. Contacte le support si c'est une erreur.",
+}
 
 const STEP_DELAYS = [
   {
@@ -54,6 +74,8 @@ export class DossiersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly fedapay: FedapayService,
+    private readonly notifications: NotificationsService,
+    private readonly pickup: PickupService,
   ) {}
 
   async create(userId: string, body: CreateDossierBody) {
@@ -145,6 +167,7 @@ export class DossiersService {
         commission: service.commission,
         totalAmount: officialPrice + service.commission,
         pickupLocation: service.pickupLocation,
+        pickupCode: await this.pickup.generateCode(),
         events: {
           create: {
             status: "DEMANDE_ENVOYEE",
@@ -153,6 +176,16 @@ export class DossiersService {
         },
       },
       include: INCLUDE,
+    })
+
+    await this.notifications.notifyQuietly({
+      dossierId: dossier.id,
+      userId: user.id,
+      phone: user.phone,
+      title: `Dossier ${dossier.reference} créé`,
+      body: `${service.name} : dossier ${dossier.reference} enregistré. Montant à payer : ${new Intl.NumberFormat(
+        "fr-FR",
+      ).format(dossier.totalAmount)} FCFA. Paie sur MindBenin pour lancer le traitement.`,
     })
 
     return toDossierDTO(dossier)
@@ -240,7 +273,51 @@ export class DossiersService {
       throw new NotFoundException("Dossier introuvable.")
     }
 
+    if (updated.payment?.status === "REUSSI") {
+      await this.notifications.notifyQuietly({
+        dossierId: updated.id,
+        userId: updated.userId,
+        phone: phone || updated.user.phone,
+        title: `Paiement confirmé — ${updated.reference}`,
+        body: `Paiement de ${new Intl.NumberFormat("fr-FR").format(
+          updated.totalAmount,
+        )} FCFA reçu pour ${updated.service.name}. Reçu ${updated.payment.receipt}. Ton dossier passe en traitement.`,
+      })
+    }
+
     return toDossierDTO(updated)
+  }
+
+  /** Reçu PDF du paiement : disponible uniquement si le paiement est réussi. */
+  async receipt(userId: string, reference: string): Promise<{ buffer: Buffer; filename: string }> {
+    const dossier = await this.prisma.dossier.findFirst({
+      where: { reference, userId },
+      include: INCLUDE,
+    })
+
+    if (!dossier) {
+      throw new NotFoundException("Dossier introuvable.")
+    }
+
+    if (!dossier.payment || dossier.payment.status !== "REUSSI" || !dossier.payment.paidAt) {
+      throw new BadRequestException("Le reçu sera disponible dès la confirmation du paiement.")
+    }
+
+    const buffer = buildReceiptPdf({
+      reference: dossier.reference,
+      serviceName: dossier.service.name,
+      amount: dossier.payment.amount,
+      receipt: dossier.payment.receipt,
+      transactionRef: dossier.payment.transactionRef,
+      provider: dossier.payment.provider === "MTN_MOMO" ? "MTN MoMo" : "Moov Money",
+      phone: dossier.payment.phone,
+      paidAt: dossier.payment.paidAt,
+      customerName: `${dossier.user.firstName} ${dossier.user.lastName}`,
+      npi: dossier.user.npi,
+      pickupLocation: dossier.pickupLocation,
+    })
+
+    return { buffer, filename: `recu-${dossier.reference}.pdf` }
   }
 
   /**
@@ -250,7 +327,7 @@ export class DossiersService {
   async confirmFedapayPayment(reference: string, transactionId?: string): Promise<void> {
     const dossier = await this.prisma.dossier.findUnique({
       where: { reference },
-      include: { payment: true, events: true },
+      include: { payment: true, events: true, user: { select: { id: true, phone: true } } },
     })
 
     if (!dossier?.payment || dossier.payment.status === "REUSSI") {
@@ -383,7 +460,7 @@ export class DossiersService {
 
   private async markAsPaid(
     dossier: Prisma.DossierGetPayload<{
-      include: { payment: true; events: true }
+      include: { payment: true; events: true; user: { select: { id: true; phone: true } } }
     }>,
   ): Promise<void> {
     const now = new Date()
@@ -410,6 +487,8 @@ export class DossiersService {
             }),
           ]),
     ])
+
+    await this.notifyStatus(dossier.id, dossier.user.phone, "IDENTITE_VERIFIEE", dossier.user.id)
   }
 
   private async generateReference(): Promise<string> {
@@ -435,7 +514,7 @@ export class DossiersService {
   private async advance(reference: string): Promise<void> {
     const dossier = await this.prisma.dossier.findUnique({
       where: { reference },
-      include: { payment: true, events: true },
+      include: { payment: true, events: true, user: { select: { phone: true, id: true } } },
     })
 
     if (
@@ -482,5 +561,39 @@ export class DossiersService {
         }),
       ),
     ])
+
+    for (const step of missing) {
+      await this.notifyStatus(dossier.id, dossier.user.phone, step.status, dossier.user.id)
+    }
+  }
+
+  private async notifyStatus(
+    dossierId: string,
+    phone: string | null | undefined,
+    status: string,
+    userId?: string,
+  ) {
+    const body = STATUS_NOTIFICATIONS[status]
+
+    if (!body) {
+      return
+    }
+
+    const dossier = await this.prisma.dossier.findUnique({
+      where: { id: dossierId },
+      select: { reference: true, service: { select: { shortName: true } } },
+    })
+
+    if (!dossier) {
+      return
+    }
+
+    await this.notifications.notifyQuietly({
+      dossierId,
+      userId,
+      phone,
+      title: `${dossier.service.shortName} — ${dossier.reference}`,
+      body,
+    })
   }
 }

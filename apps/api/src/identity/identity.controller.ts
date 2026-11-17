@@ -8,9 +8,12 @@ export class IdentityController {
   constructor(private readonly identity: IdentityService) {}
 
   @Post("scan")
-  scan(@Body() body: { image?: unknown }) {
+  scan(@Body() body: { image?: unknown; frames?: unknown }) {
     const image = typeof body?.image === "string" ? body.image : undefined
-    return this.identity.scan(image)
+    const frames = Array.isArray(body?.frames)
+      ? body.frames.filter((frame): frame is string => typeof frame === "string")
+      : undefined
+    return this.identity.scan(image, frames)
   }
 
   @UseGuards(AuthGuard)

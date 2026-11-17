@@ -471,3 +471,22 @@ export type VoiceIntent = {
   label: string
   details: Record<string, string>
 }
+
+const STATUS_QUERY_PATTERNS = [
+  /ou (en )?est (mon|le) dossier/,
+  /ou en (est|suis)[- ]je/,
+  /statut (de|du) (mon|le) dossier/,
+  /etat (de|du) (mon|le) dossier/,
+  /suivi (de|du) (mon|le) dossier/,
+  /mon dossier (est )?(ou|pret|avance)/,
+  /quand (est[- ]ce que )?(je|mon dossier)/,
+  /iwe mi/,
+  /wema (towe|ce)/,
+  /nɔ mi/,
+]
+
+/** « Où est mon dossier ? » — question de suivi, pas une nouvelle démarche. */
+export function isStatusQuery(value: string): boolean {
+  const text = normalize(value)
+  return STATUS_QUERY_PATTERNS.some((pattern) => pattern.test(text))
+}

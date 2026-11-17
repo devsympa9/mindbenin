@@ -1,8 +1,28 @@
 import type { Prisma } from "@prisma/client"
 
-export type DossierWithRelations = Prisma.DossierGetPayload<{
+type DossierBase = Prisma.DossierGetPayload<{
   include: { service: true; payment: true; events: true; user: true }
 }>
+
+type DossierExtras = {
+  documents?: {
+    id: string
+    name: string
+    mimeType: string
+    size: number
+    createdAt: Date
+  }[]
+  procuration?: {
+    holderName: string
+    holderPhone: string
+    holderIdNumber: string
+    code: string
+    revokedAt: Date | null
+    createdAt: Date
+  } | null
+}
+
+export type DossierWithRelations = DossierBase & DossierExtras
 
 export function toAdminDossierDTO(dossier: DossierWithRelations) {
   const base = toDossierDTO(dossier)
@@ -36,6 +56,7 @@ export function toDossierDTO(dossier: DossierWithRelations) {
     status: dossier.status,
     createdAt: dossier.createdAt.toISOString(),
     readyAt: dossier.readyAt?.toISOString() ?? null,
+    collectedAt: dossier.collectedAt?.toISOString() ?? null,
     officialPrice: dossier.officialPrice,
     commission: dossier.commission,
     totalAmount: dossier.totalAmount,
@@ -66,6 +87,23 @@ export function toDossierDTO(dossier: DossierWithRelations) {
         message: event.message,
         createdAt: event.createdAt.toISOString(),
       })),
+    documents: (dossier.documents ?? []).map((document) => ({
+      id: document.id,
+      name: document.name,
+      mimeType: document.mimeType,
+      size: document.size,
+      createdAt: document.createdAt.toISOString(),
+    })),
+    procuration: dossier.procuration
+      ? {
+          holderName: dossier.procuration.holderName,
+          holderPhone: dossier.procuration.holderPhone,
+          holderIdNumber: dossier.procuration.holderIdNumber,
+          code: dossier.procuration.code,
+          active: !dossier.procuration.revokedAt,
+          createdAt: dossier.procuration.createdAt.toISOString(),
+        }
+      : null,
     user: {
       firstName: dossier.user.firstName,
       lastName: dossier.user.lastName,

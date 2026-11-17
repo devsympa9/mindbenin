@@ -1,9 +1,11 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 
-type AdminRequest = {
+export type AdminRole = "admin" | "agent"
+
+export type AdminRequest = {
   headers: Record<string, string | undefined>
-  admin?: { id: string }
+  admin?: { id: string; role: AdminRole }
 }
 
 @Injectable()
@@ -19,13 +21,15 @@ export class AdminGuard implements CanActivate {
     }
 
     try {
-      const payload = await this.jwt.verifyAsync<{ sub?: string; role?: string }>(header.slice(7))
+      const payload = await this.jwt.verifyAsync<{ sub?: string; role?: string }>(
+        header.slice(7),
+      )
 
-      if (payload.role !== "admin") {
+      if (payload.role !== "admin" && payload.role !== "agent") {
         throw new Error("Rôle administrateur requis.")
       }
 
-      request.admin = { id: payload.sub ?? "admin" }
+      request.admin = { id: payload.sub ?? "admin", role: payload.role }
       return true
     } catch {
       throw new UnauthorizedException("Session administrateur invalide ou expirée.")

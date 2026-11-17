@@ -36,6 +36,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# pièces justificatives stockées sur disque (fallback sans S3)
+apps/api/storage
 
 # vercel
 .vercel
@@ -43,3 +47,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.tmp-pay/**

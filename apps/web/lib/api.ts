@@ -2,7 +2,7 @@ import { cookies } from "next/headers"
 
 export const TOKEN_COOKIE = "mb_token"
 
-const API_URL = process.env.API_INTERNAL_URL ?? "http://localhost:4000"
+export const API_URL = process.env.API_INTERNAL_URL ?? "http://localhost:4000"
 
 export class ApiError extends Error {
   constructor(
@@ -15,9 +15,19 @@ export class ApiError extends Error {
 }
 
 type ApiFetchOptions = {
-  method?: "GET" | "POST"
+  method?: "GET" | "POST" | "DELETE"
   body?: unknown
   token?: string
+}
+
+/** Variante brute pour relayer un PDF ou un fichier vers le navigateur. */
+export async function apiFetchRaw(path: string, token?: string): Promise<Response> {
+  const auth = token ?? (await cookies()).get(TOKEN_COOKIE)?.value
+
+  return fetch(`${API_URL}${path}`, {
+    headers: auth ? { Authorization: `Bearer ${auth}` } : {},
+    cache: "no-store",
+  })
 }
 
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {

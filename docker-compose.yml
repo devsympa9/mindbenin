@@ -39,6 +39,31 @@ services:
       retries: 12
       start_period: 20s
 
+  # Stockage objet compatible S3 pour les pièces justificatives.
+  # Optionnel : sans lui, l'API écrit dans le volume local `mindbenin_storage`.
+  #   docker compose --profile minio up -d
+  # MinIO a retiré ses images de Docker Hub : on passe par le build Bitnami
+  # legacy, qui expose la même API S3 et les mêmes variables MINIO_ROOT_*.
+  minio:
+    image: bitnamilegacy/minio:latest
+    container_name: mindbenin-minio
+    restart: unless-stopped
+    profiles: ["minio"]
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
+      MINIO_DEFAULT_BUCKETS: ${S3_BUCKET:-mindbenin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - mindbenin_minio:/bitnami/minio/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   api:
     build:
       context: .
@@ -53,12 +78,32 @@ services:
       API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:4001}
       JWT_SECRET: ${JWT_SECRET:-mindbenin-dev-secret-change-me}
       ADMIN_ACCESS_CODE: ${ADMIN_ACCESS_CODE:-mindbenin-admin}
+      ADMIN_AGENT_CODE: ${ADMIN_AGENT_CODE:-}
       FACE_SERVICE_URL: http://face:8000
+      # Pièces justificatives : S3/MinIO si renseigné, sinon disque local.
+      STORAGE_DIR: /data/storage
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_BUCKET: ${S3_BUCKET:-mindbenin}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      # Notifications : sans clé, chaque envoi est journalisé en statut SIMULE.
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM: ${TWILIO_FROM:-}
+      TWILIO_MESSAGING_SERVICE_SID: ${TWILIO_MESSAGING_SERVICE_SID:-}
+      WHATSAPP_TOKEN: ${WHATSAPP_TOKEN:-}
+      WHATSAPP_PHONE_ID: ${WHATSAPP_PHONE_ID:-}
+      SMS_WEBHOOK_URL: ${SMS_WEBHOOK_URL:-}
+      SMS_WEBHOOK_TOKEN: ${SMS_WEBHOOK_TOKEN:-}
       FEDAPAY_SECRET_KEY: ${FEDAPAY_SECRET_KEY:-}
       FEDAPAY_BASE_URL: ${FEDAPAY_BASE_URL:-https://sandbox-api.fedapay.com/v1}
       FEDAPAY_CALLBACK_URL: ${FEDAPAY_CALLBACK_URL:-http://localhost:4001/payments/fedapay/callback}
+      FEDAPAY_WEBHOOK_SECRET: ${FEDAPAY_WEBHOOK_SECRET:-}
     ports:
       - "4001:4001"
+    volumes:
+      - mindbenin_storage:/data/storage
     depends_on:
       db:
         condition: service_healthy
@@ -96,3 +141,5 @@ services:
 
 volumes:
   mindbenin_pgdata:
+  mindbenin_storage:
+  mindbenin_minio:

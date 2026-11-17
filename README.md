@@ -8,10 +8,13 @@ Démo de la plateforme qui supprime la file d'attente administrative au Bénin :
 
 | Partie   | Technologie                                                  |
 | -------- | ------------------------------------------------------------ |
-| Frontend | Next.js 16 (App Router), React 19, Tailwind CSS 4, shadcn/ui |
-| Backend  | NestJS 11, JWT, Prisma 6, FedaPay                            |
-| Base     | PostgreSQL 16 (Docker)                                       |
-| Monorepo | Turborepo + npm workspaces                                   |
+| Frontend      | Next.js 16 (App Router), React 19, Tailwind CSS 4, shadcn/ui |
+| Backend       | NestJS 11, JWT, Prisma 6, FedaPay                            |
+| Base          | PostgreSQL 16 (Docker)                                       |
+| Stockage      | MinIO / tout S3 compatible, sinon disque local               |
+| Notifications | Twilio (SMS), WhatsApp Cloud API, webhook SMS ou journal simulé |
+| Documents     | Reçu PDF généré par l'API, QR de retrait, pièces justificatives |
+| Monorepo      | Turborepo + npm workspaces                                   |
 
 ## Structure
 
@@ -23,14 +26,20 @@ apps/
       auth/            garde JWT
       identity/        scan ANIP simulé + session
       services/        catalogue des démarches
-      dossiers/        création, suivi, paiement
+      dossiers/        création, suivi, paiement, pièces, retrait, flux SSE
       fedapay/         client API FedaPay
       payments/        callback + webhook FedaPay
+      notifications/   SMS, WhatsApp, journal des envois
+      storage/         pièces justificatives (S3/MinIO ou disque)
+      common/          reçu PDF, sérialisation des dossiers
+      admin/           back-office, rôles, audit, export CSV
       prisma/          client Prisma
   web/                 Front Next.js (port 3000)
-    app/               landing, scan, /app, services, dossiers
+    app/               landing, scan, /app, services, dossiers, admin, offline
+    app/api/           relais same-origin : reçu PDF, pièces, SSE, export CSV
     components/
-    lib/               client API, session, server actions, statuts
+    lib/               client API, session, server actions, statuts, i18n, voix
+    public/sw.js       service worker (coquille hors-ligne)
   face/                Service Python de détection faciale (port 8000)
 packages/              design system et configs partagées
 docker-compose.yml     Stack complète (Postgres, API, web, service facial)
@@ -70,7 +79,18 @@ npm run dev
 docker compose up -d --build
 ```
 
-Lance PostgreSQL, l'API (4001), le front (3000) et le service facial (8000). Les données Postgres sont conservées dans le volume `mindbenin_pgdata`. Les clés et codes se passent par un fichier `.env` à la racine (variables `FEDAPAY_SECRET_KEY`, `ADMIN_ACCESS_CODE`, `JWT_SECRET`, etc.) ; sans clé FedaPay le paiement reste simulé.
+Lance PostgreSQL, l'API (4001), le front (3000) et le service facial (8000). Les données Postgres sont conservées dans le volume `mindbenin_pgdata`, les pièces justificatives dans `mindbenin_storage`. Les clés et codes se passent par un fichier `.env` à la racine (copier `.env.example`) ; sans clé FedaPay le paiement reste simulé.
+
+Stockage objet (optionnel) :
+
+```bash
+docker compose --profile minio up -d   # MinIO sur 9000 (console 9001)
+# puis dans .env : S3_ENDPOINT=http://minio:9000, S3_ACCESS_KEY=…, S3_SECRET_KEY=…
+```
+
+MinIO a retiré ses images de Docker Hub : le compose utilise le build Bitnami legacy (`bitnamilegacy/minio`), qui expose la même API S3, le même port 9000 et les mêmes variables `MINIO_ROOT_*`. Le bucket `mindbenin` est créé au démarrage, et l'API le recrée au besoin.
+
+Sans `S3_ENDPOINT`, les pièces sont écrites sur disque (`STORAGE_DIR`, volume `mindbenin_storage`) : la démo reste utilisable sans MinIO.
 
 Parcours de démo : **Scanner mon visage** → choisir un service → créer le dossier → payer (numéro `01 XX XX XX XX`) → regarder le statut avancer.
 
@@ -85,12 +105,27 @@ DATABASE_URL="postgresql://mindbenin:mindbenin@localhost:5433/mindbenin?schema=p
 JWT_SECRET="mindbenin-dev-secret-change-me"
 PORT=4001
 WEB_ORIGIN="http://localhost:3000"
-ADMIN_ACCESS_CODE="mindbenin-admin"        # accès au back-office /admin
-FACE_SERVICE_URL="http://localhost:8000"    # service facial Python (scan reel)
+ADMIN_ACCESS_CODE="mindbenin-admin"        # accès complet au back-office /admin
+ADMIN_AGENT_CODE=""                        # rôle agent (lecture, pas d'annulation ni d'audit)
+FACE_SERVICE_URL="http://localhost:8000"    # service facial Python (scan réel)
+
+STORAGE_DIR="storage"                      # fallback disque des pièces justificatives
+S3_ENDPOINT=""                             # http://localhost:9000 si MinIO
+S3_BUCKET="mindbenin"
+S3_ACCESS_KEY=""
+S3_SECRET_KEY=""
+
+TWILIO_ACCOUNT_SID=""                      # envoi SMS réel
+TWILIO_AUTH_TOKEN=""
+TWILIO_FROM=""
+WHATSAPP_TOKEN=""                          # WhatsApp Cloud API
+WHATSAPP_PHONE_ID=""
+SMS_WEBHOOK_URL=""                         # passerelle SMS maison (POST JSON)
 
 FEDAPAY_SECRET_KEY=""                     # clé sk_sandbox_… / sk_live_…
 FEDAPAY_BASE_URL="https://sandbox-api.fedapay.com/v1"
 FEDAPAY_CALLBACK_URL="http://localhost:4001/payments/fedapay/callback"
+FEDAPAY_WEBHOOK_SECRET=""                  # secret HMAC du webhook (header x-fedapay-signature)
 ```
 
 `apps/web/.env` :
@@ -129,6 +164,53 @@ L'espace agents est disponible sur http://localhost:3000/admin. Il permet de :
 La connexion se fait avec le code défini par `ADMIN_ACCESS_CODE` (par défaut `mindbenin-admin` en développement). **Change-le avant toute mise en ligne.** La session admin est un JWT de 12 h stocké dans un cookie `httpOnly` séparé (`mb_admin`) et vérifié à chaque appel de l'API.
 
 Dès qu'un agent change un statut, l'avancement automatique de la démo est désactivé pour ce dossier (`manualOverride`) : le dossier ne bouge plus que sur action humaine.
+
+Outils ajoutés :
+
+- **Retrait** (`/admin/scan`) — lecture du QR de retrait à la caméra (décodage navigateur) ou saisie du code à 6 chiffres, validation côté API ; un code de procuration remet le document à la personne mandatée.
+- **Notifications** (`/admin/notifications`) — journal de tous les envois (canal, destinataire, statut, message), renvoi des envois en échec, lancement des relances des dossiers prêts non retirés.
+- **Audit** (`/admin/audit`) — chaque action sensible est journalisée (agent, dossier, action, détail, date).
+- **Export CSV** — file de dossiers filtrée, exportée avec BOM et séparateur `;` pour Excel FR.
+- **Pièces justificatives** — téléchargement des pièces déposées par le citoyen, jamais d'URL publique.
+
+Deux codes donnent deux rôles : `ADMIN_ACCESS_CODE` (admin, tout) et `ADMIN_AGENT_CODE` (agent : consultation, statuts, retrait, notifications ; l'annulation et l'audit restent réservés à l'admin).
+
+## Pièces justificatives
+
+Le citoyen peut joindre jusqu'à 8 pièces par dossier (PDF, JPEG, PNG, WebP, 4 Mo max). L'API vérifie le type MIME **et** la signature du fichier, puis écrit dans MinIO/S3 si configuré, sinon dans `STORAGE_DIR`. Le téléchargement passe toujours par l'API (`GET /dossiers/:reference/documents/:id`) et par un relais Next same-origin : aucune URL signée publique, aucun fichier exposé.
+
+## Retrait : QR et code
+
+À l'étape « Prêt à récupérer », l'API génère un code à 6 chiffres et son QR (`MINDBN|<référence>|<code>`), affichés dans le dossier. Le guichet scanne le QR ou saisit le code ; la validation est toujours faite côté API (`POST /admin/dossiers/:reference/pickup`), et le dossier passe à « Récupéré ». Une procuration peut désigner une autre personne : elle reçoit son propre code, décodé par le même écran.
+
+## Paiement réel et reçu PDF
+
+En plus de la re-vérification `GET /transactions/{id}`, le webhook FedaPay peut être protégé par HMAC : renseigner `FEDAPAY_WEBHOOK_SECRET`, l'API compare `x-fedapay-signature`. Chaque dossier payé expose un reçu PDF (`GET /dossiers/:reference/receipt` puis `/api/receipt/[reference]`), généré sans dépendance : référence, identité, service, montant officiel, commission, moyen de paiement et date.
+
+## Notifications et relances
+
+Chaque envoi est d'abord écrit dans la table `Notification`, puis livré :
+
+1. webhook SMS (`SMS_WEBHOOK_URL`) si défini ;
+2. sinon Twilio (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` ou `TWILIO_MESSAGING_SERVICE_SID`) ;
+3. sinon WhatsApp Cloud API (`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`) ;
+4. sinon statut `SIMULE` : le message reste lisible dans l'app et le back-office.
+
+Déclencheurs : paiement confirmé, changement de statut, mise à disposition. Les échecs sont rejouables (`POST /admin/notifications/retry`) et les dossiers prêts non retirés peuvent recevoir une relance (`POST /admin/reminders/run`, une seule par dossier grâce à `reminderSentAt`).
+
+## Temps réel, voix et multilingue
+
+- Le dossier s'abonne à `GET /dossiers/:reference/stream` (SSE). Le cookie citoyen est `httpOnly` : le front relaie donc le flux par `/api/dossiers/[reference]/stream`, et retombe sur le polling si `EventSource` échoue.
+- Trois langues pour les statuts et les annonces : français, fon, yoruba (`lib/i18n.ts`). Les traductions sont communautaires et à valider.
+- « Où est mon dossier ? » (micro ou saisie) fait lire à voix haute le dernier dossier, son statut et son montant.
+
+## Contrôle de présence (liveness)
+
+`POST /liveness` (service `apps/face`) reçoit trois prises espacées et mesure le mouvement entre les frames, la netteté (variance du Laplacien) et le ratio du visage. Une photo statique tenue devant la caméra est refusée et `identity.scan` repasse en mode simulé. C'est un filtre anti-photo simple, pas un antispoofing par apprentissage : à remplacer avant toute production.
+
+## PWA
+
+L'app est installable (`/manifest.webmanifest`) et affiche une page `/offline` claire quand le réseau tombe. Le service worker ne met **jamais** en cache les réponses `/api/` ni les pages de dossier : les données restent privées.
 
 ## Scan facial réel (service Python)
 
@@ -191,6 +273,15 @@ Les factures SONEB/SBEE ont un montant variable validé côté serveur (500 à 1
 | GET     | `/dossiers`                     | JWT  | dossiers de l'utilisateur                      |
 | GET     | `/dossiers/:reference`          | JWT  | détail + avancement automatique                |
 | POST    | `/dossiers/:reference/pay`      | JWT  | crée le paiement FedaPay ou simule le paiement |
+| GET     | `/dossiers/:reference/receipt`  | JWT  | reçu PDF du dossier payé                       |
+| GET, POST | `/dossiers/:reference/documents` | JWT | lister / déposer une pièce justificative  |
+| GET, DELETE | `/dossiers/:reference/documents/:id` | JWT | télécharger / supprimer une pièce    |
+| GET     | `/dossiers/:reference/pickup`   | JWT  | code + QR de retrait (statut prêt)             |
+| POST, DELETE | `/dossiers/:reference/procuration` | JWT | désigner / retirer une personne mandatée |
+| GET     | `/dossiers/:reference/stream`   | JWT  | flux SSE des changements de statut             |
+| GET     | `/notifications`                | JWT  | journal des envois du citoyen                  |
+| POST    | `/notifications/read`           | JWT  | marquer les notifications comme lues           |
+| POST    | `/liveness`                     | —    | contrôle de présence sur trois frames          |
 | GET     | `/payments/fedapay/callback`    | —    | retour FedaPay, vérification + redirection     |
 | POST    | `/payments/fedapay/webhook`     | —    | notifications FedaPay                          |
 | POST    | `/admin/login`                  | —    | connexion agent (code admin)                   |
@@ -199,6 +290,13 @@ Les factures SONEB/SBEE ont un montant variable validé côté serveur (500 à 1
 | GET     | `/admin/dossiers`               | admin | file de dossiers (`status`, `q`)               |
 | GET     | `/admin/dossiers/:reference`    | admin | détail d'un dossier                            |
 | POST    | `/admin/dossiers/:reference/status` | admin | changer le statut                         |
+| POST    | `/admin/dossiers/:reference/pickup` | admin | valider un retrait par code ou QR         |
+| GET     | `/admin/dossiers/:reference/documents/:id` | admin | télécharger une pièce             |
+| GET     | `/admin/notifications`          | admin | journal global des notifications              |
+| POST    | `/admin/notifications/retry`    | admin | renvoyer les notifications en échec           |
+| POST    | `/admin/reminders/run`          | admin | relancer les dossiers prêts non retirés       |
+| GET     | `/admin/audit`                  | admin | journal d'audit (admin uniquement)            |
+| GET     | `/admin/export`                 | admin | export CSV de la file de dossiers             |
 
 Authentification : `Authorization: Bearer <JWT>`. Le front conserve le JWT dans un cookie `httpOnly` et appelle l'API côté serveur (server actions).
 

@@ -85,22 +85,61 @@ Suivi de l'implémentation de la démo (Phase 1 du document `project.md`).
 - [x] CNSS : suivi de cotisation (numéro CNSS, période) et pension de retraite (numéro de dossier, type de demande).
 - [x] Configuration locale documentée dans `README.md`.
 
+### Lot 1 — Pièces justificatives, retrait QR, notifications
+
+- [x] Modèles Prisma `Document`, `Notification`, `Procuration`, `AdminAudit` + champs `pickupCode`, `collectedAt`, `reminderSentAt`.
+- [x] Upload de pièces (PDF, JPEG, PNG, WebP ; 4 Mo max, 8 pièces par dossier) avec validation du type et du contenu, stockage S3/MinIO ou disque local.
+- [x] Téléchargement et suppression des pièces, côté citoyen et côté agent (jamais d'URL publique : l'API relaie le fichier).
+- [x] QR de retrait généré côté API (`qrcode`, SVG) avec payload `MINDBN|<référence>|<code 6 chiffres>` ; le code et le QR ne sont révélés qu'au statut « prêt à récupérer ».
+- [x] Procuration : une personne de confiance reçoit son propre code de retrait à 6 chiffres.
+- [x] Journal `Notification` : un envoi est écrit avant livraison (canal, destinataire, statut `SIMULE` / `ENVOYE` / `ECHEC`, message).
+- [x] Canaux : Twilio (SMS), WhatsApp Cloud API, webhook SMS générique (`SMS_WEBHOOK_URL`) ; sans clé, statut `SIMULE` et message lisible dans l'app.
+- [x] Notifications au paiement confirmé, au changement de statut et à la mise à disposition.
+
+### Lot 2 — Paiement réel, reçu PDF, relances
+
+- [x] Webhook FedaPay vérifié par HMAC (`FEDAPAY_WEBHOOK_SECRET`, header `x-fedapay-signature`), en plus de la re-vérification serveur `GET /transactions/{id}`.
+- [x] Reçu PDF généré par l'API sans dépendance (A4, Helvetica, WinAnsi) : référence, identité, service, montant officiel + commission, moyen de paiement, date.
+- [x] Route web `/api/receipt/[reference]` : le PDF est servi same-origin avec le cookie httpOnly, jamais exposé publiquement.
+- [x] Relances automatiques des dossiers prêts et non retirés (`reminderSentAt`), déclenchées par l'agent ou le cron.
+- [x] Renvoi manuel des notifications en échec depuis le back-office.
+
+### Lot 3 — Temps réel, voix, back-office
+
+- [x] SSE `GET /dossiers/:reference/stream` (auth par Bearer ou `?token=`) relayé par `/api/dossiers/[reference]/stream` ; le front bascule en polling si `EventSource` échoue.
+- [x] Annonces vocales localisées fr/fon/yoruba (`lib/i18n.ts`, `speak(..., { lang })`) et question « où est mon dossier ? » qui lit le dernier dossier.
+- [x] Back-office : scan du QR de retrait, validation par code, journal des notifications, relances, audit des actions, export CSV (BOM + `;` pour Excel FR).
+- [x] Rôles admin (`ADMIN_ACCESS_CODE` = admin, `ADMIN_AGENT_CODE` = agent) : annulation et audit réservés à l'admin.
+
+### Lot 4 — Liveness, multilingue, PWA, sécurité
+
+- [x] Contrôle de présence (`POST /liveness`, `apps/face`) : trois prises espacées, mouvement entre les frames, netteté (Laplacien) et ratio du visage ; une photo statique est refusée.
+- [x] `identity.scan` accepte un lot de frames et refuse un visage figé.
+- [x] i18n fr/fon/yoruba : libellés de statut et phrases vocales (traductions communautaires à valider).
+- [x] PWA : `manifest.webmanifest`, service worker (coquille hors-ligne, aucune donnée de dossier en cache), page `/offline`.
+- [x] Sécurité : headers (CSP, X-Frame-Options, Referrer-Policy), `Permissions-Policy` caméra/micro, rate limiting sur scan, upload, paiement et admin, `rawBody` conservé pour les signatures.
+
 ## Prochaines étapes (Phase 2 — V1 réelle)
 
-- [ ] Fournir une clé sandbox FedaPay puis une clé live, tester le parcours complet dans le dashboard.
+- [x] Clé sandbox FedaPay : création de transaction et lien de checkout validés (réponse JSON:API `v1/transaction` désormais déballée).
+- [x] Parcours décliné validé de bout en bout (sandbox) : statut `declined` → paiement `ECHOUE`, événement et notification journalisés ; callback renvoie 302 et webhook vérifie la signature au format FedaPay (`t=...,s=HMAC(timestamp.corps)`) et extrait `entity.id`.
+- [ ] Clé live FedaPay et validation d'un paiement approuvé de bout en bout (retour + webhook).
 - [ ] Exposer l'API (tunnel) et déclarer le webhook FedaPay `https://…/payments/fedapay/webhook`.
 - [ ] Remplacer le simulateur ANIP par l'API officielle (accord d'accès + gestion des consentements).
 - [ ] Choisir un seul service réel pour la V1 : acte de naissance.
-- [ ] Notifications push/SMS réelles au changement de statut.
-- [ ] Stockage chiffré et politique de conservation des données biométriques.
+- [ ] Livraison SMS/WhatsApp réelle : brancher une clé Twilio ou WhatsApp Cloud API et relancer une notification depuis le back-office.
+- [x] Stockage objet validé de bout en bout : upload, lecture et suppression d'une pièce dans le bucket `mindbenin` (profil `minio`).
+- [ ] Chiffrement au repos des pièces et politique de conservation des données faciales.
+- [ ] Antispoofing biométrique sérieux (le contrôle actuel est heuristique).
 - [ ] Cadre légal de la commission de confort sur des frais publics.
-- [ ] Authentification renforcée (OTP téléphone, rate limiting).
+- [ ] Authentification renforcée (OTP téléphone).
 
 ## Phase 3 — Vision 2050
 
 - [ ] Santé, école, permis de conduire, impôts, toutes les administrations.
 - [x] Tableau de bord administration (traitement des dossiers, statistiques).
-- [ ] Multilingue complet : français, fon, yoruba.
+- [x] Multilingue fr/fon/yoruba sur les statuts et les annonces vocales.
+- [ ] Multilingue complet de l'interface (formulaires, pages, back-office).
 - [ ] Application mobile native (React Native / Expo) réutilisant l'API NestJS.
 
 ## Démo — rappel

@@ -9,15 +9,18 @@ import {
   IconClock,
   IconCreditCard,
   IconDeviceMobile,
+  IconDownload,
   IconLoader2,
   IconMapPin,
   IconReceipt2,
+  IconWifi,
 } from "@tabler/icons-react"
 
 import { cn } from "@workspace/ui/lib/utils"
 
 import { getDossierAction, payDossierAction } from "@/lib/actions"
 import { formatDateTime, formatFcfa } from "@/lib/format"
+import { getLocale, phrase, SPEECH_LANG, statusLabel } from "@/lib/i18n"
 import { speak } from "@/lib/speech"
 import {
   PAYMENT_PROVIDER_META,
@@ -30,6 +33,8 @@ import {
 } from "@/lib/status"
 import type { DossierDTO } from "@/lib/types"
 
+import { DocumentsPanel } from "./documents-panel"
+import { PickupPanel } from "./pickup-panel"
 import { ServiceIcon } from "./service-icon"
 import { StatusPill } from "./status-pill"
 import { SpeakButton, VoiceRepliesToggle } from "./voice-replies"
@@ -72,6 +77,7 @@ export function DossierView({ initial }: { initial: DossierDTO }) {
   const [phone, setPhone] = useState("")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [live, setLive] = useState(false)
   const spokenStatus = useRef(dossier.status)
 
   const paid = Boolean(dossier.payment?.paidAt)
@@ -94,8 +100,45 @@ export function DossierView({ initial }: { initial: DossierDTO }) {
     }
 
     spokenStatus.current = dossier.status
-    speak(`Point sur ton dossier : ${STATUS_META[dossier.status].label}.`)
-  }, [dossier.status])
+    const locale = getLocale()
+    speak(
+      phrase(locale, "statusUpdated", {
+        reference: dossier.reference,
+        status: statusLabel(locale, dossier.status),
+      }),
+      { lang: SPEECH_LANG[locale] },
+    )
+  }, [dossier.status, dossier.reference])
+
+  // Suivi en direct (SSE) : bascule automatique sur le polling si le flux tombe.
+  useEffect(() => {
+    if (final) {
+      return
+    }
+
+    const source = new EventSource(
+      `/api/dossiers/${encodeURIComponent(dossier.reference)}/stream`,
+    )
+
+    const onDossier = (event: MessageEvent<string>) => {
+      try {
+        const next = JSON.parse(event.data) as DossierDTO
+        setLive(true)
+        setDossier(next)
+      } catch {
+        // Message partiel : le prochain tick corrigera.
+      }
+    }
+
+    source.addEventListener("dossier", onDossier as EventListener)
+    source.onopen = () => setLive(true)
+    source.onerror = () => setLive(false)
+
+    return () => {
+      source.removeEventListener("dossier", onDossier as EventListener)
+      source.close()
+    }
+  }, [dossier.reference, final])
 
   useEffect(() => {
     if (final || (!paid && !pendingPayment)) {
@@ -135,10 +178,13 @@ export function DossierView({ initial }: { initial: DossierDTO }) {
       return
     }
 
+    const locale = getLocale()
     speak(
-      `Paiement de ${formatFcfa(result.data.totalAmount)} confirmé pour ${
-        result.data.service.shortName
-      }. Ton dossier est maintenant : ${STATUS_META[result.data.status].label}.`,
+      `${phrase(locale, "paymentConfirmed", {
+        amount: formatFcfa(result.data.totalAmount),
+        service: result.data.service.shortName,
+      })} ${statusLabel(locale, result.data.status)}.`,
+      { lang: SPEECH_LANG[locale] },
     )
   }
 
@@ -317,8 +363,12 @@ export function DossierView({ initial }: { initial: DossierDTO }) {
               <div className="flex items-center gap-2">
                 {!final && (
                   <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <IconLoader2 size={12} className="animate-spin" aria-hidden="true" />
-                    Actualisation auto
+                    {live ? (
+                      <IconWifi size={12} className="text-emerald-600" aria-hidden="true" />
+                    ) : (
+                      <IconLoader2 size={12} className="animate-spin" aria-hidden="true" />
+                    )}
+                    {live ? "Temps réel" : "Actualisation auto"}
                   </span>
                 )}
                 <SpeakButton text={statusSentence} label="Écouter le statut" />
@@ -393,6 +443,15 @@ export function DossierView({ initial }: { initial: DossierDTO }) {
             </section>
           )}
 
+          {(dossier.status === "PRET_A_RECUPERER" ||
+            dossier.status === "RECUPERE" ||
+            dossier.collectedAt) && <PickupPanel dossier={dossier} />}
+
+          <DocumentsPanel
+            reference={dossier.reference}
+            initialDocuments={dossier.documents ?? []}
+          />
+
           <section className="rounded-2xl border bg-card p-4">
             <div className="flex items-center gap-2 text-xs font-semibold">
               <IconMapPin size={16} className="text-primary" aria-hidden="true" /> Lieu de retrait
@@ -434,6 +493,15 @@ export function DossierView({ initial }: { initial: DossierDTO }) {
                   </dd>
                 </div>
               </dl>
+
+              {dossier.payment.status === "REUSSI" && (
+                <a
+                  href={`/api/receipt/${encodeURIComponent(dossier.reference)}`}
+                  className="mt-3 flex h-9 items-center justify-center gap-1.5 rounded-lg border text-[11px] font-medium transition hover:border-primary/50 hover:text-primary"
+                >
+                  <IconDownload size={14} aria-hidden="true" /> Télécharger le reçu PDF
+                </a>
+              )}
             </section>
           )}
 

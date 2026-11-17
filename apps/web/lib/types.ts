@@ -38,11 +38,67 @@ export type UserDTO = {
   phone: string | null
 }
 
+export type DocumentDTO = {
+  id: string
+  name: string
+  mimeType: string
+  size: number
+  createdAt: string
+}
+
+export type ProcurationDTO = {
+  holderName: string
+  holderPhone: string
+  holderIdNumber: string
+  code: string
+  active: boolean
+  createdAt: string
+}
+
+export type PickupDTO = {
+  reference: string
+  code: string
+  payload: string
+  qrSvg: string | null
+  available: boolean
+  collectedAt: string | null
+  pickupLocation: string
+  procuration: ProcurationDTO | null
+}
+
+export type NotificationDTO = {
+  id: string
+  channel: "SMS" | "WHATSAPP"
+  recipient: string
+  title: string
+  body: string
+  status: "EN_ATTENTE" | "ENVOYE" | "SIMULE" | "ECHEC"
+  provider: string | null
+  error: string | null
+  sentAt: string | null
+  readAt: string | null
+  createdAt: string
+  dossier?: { reference: string } | null
+}
+
+export type AuditDTO = {
+  id: string
+  actor: string
+  role: string
+  action: string
+  target: string
+  meta: unknown
+  createdAt: string
+}
+
 export type DossierDTO = {
   reference: string
   status: DossierStatusValue
   createdAt: string
   readyAt: string | null
+  collectedAt: string | null
+  documents: DocumentDTO[]
+  procuration: ProcurationDTO | null
   officialPrice: number
   commission: number
   totalAmount: number
@@ -97,5 +153,7 @@ export type AdminStats = {
   today: number
   revenue: number
   toProcess: number
+  needsDocuments: number
+  notificationsFailed: number
   byStatus: Record<DossierStatusValue, number>
 }

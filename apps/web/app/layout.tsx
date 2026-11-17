@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next"
 import { Geist_Mono, IBM_Plex_Sans } from "next/font/google"
 
 import "@workspace/ui/globals.css"
+import { PwaRegister } from "@/components/pwa-register"
 import { ThemeProvider } from "@/components/theme-provider"
 import { cn } from "@workspace/ui/lib/utils";
 
@@ -19,6 +20,8 @@ export const metadata: Metadata = {
   },
   description:
     "Passeport, acte de naissance, casier judiciaire, impôts : MindBenin remplit, paie et suit tes démarches administratives au Bénin.",
+  applicationName: "MindBenin",
+  appleWebApp: { capable: true, title: "MindBenin", statusBarStyle: "default" },
 }
 
 export const viewport: Viewport = {
@@ -38,6 +41,7 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider>{children}</ThemeProvider>
+        <PwaRegister />
       </body>
     </html>
   )
