@@ -147,6 +147,27 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 - Détection : `POST /detect` (image multipart ou JSON `{ "image": "data:image/jpeg;base64,..." }`)
 - Variable `FACE_SERVICE_URL` dans `apps/api/.env` (vide = mode simulé).
 
+## Services disponibles
+
+Tous passent par le même parcours : identité NPI, formulaire pré-rempli, paiement mobile money, suivi jusqu'au retrait.
+
+| Service                     | Prix officiel        | Délai  | Champs demandés                                       |
+| --------------------------- | -------------------- | ------ | ----------------------------------------------------- |
+| Passeport biométrique       | 50 000 FCFA          | 10 j   | type de demande, type de passeport                    |
+| Acte de naissance           | 2 000 FCFA           | 2 j    | nombre de copies, usage                               |
+| Casier judiciaire           | 5 000 FCFA           | 3 j    | motif                                                 |
+| Acte de célibat             | 2 000 FCFA           | 3 j    | motif, nombre de copies                               |
+| Attestation de résidence    | 1 000 FCFA           | 2 j    | adresse, durée de résidence, motif                    |
+| Déclaration d'impôts        | 2 000 FCFA           | 1 j    | type de déclaration, revenu annuel                    |
+| TVM                         | 15 000 FCFA          | 1 j    | catégorie, puissance fiscale, immatriculation          |
+| Visite technique            | 12 000 FCFA          | 1 j    | type de véhicule, immatriculation, centre             |
+| Facture SONEB               | montant de la facture | 1 j    | numéro de facture/compteur, montant                   |
+| Facture SBEE                | montant de la facture | 1 j    | numéro de facture/compteur, montant                   |
+| Cotisation CNSS             | 3 000 FCFA           | 3 j    | numéro CNSS, période consultée                        |
+| Pension de retraite         | 2 000 FCFA           | 5 j    | numéro de dossier, type de demande                    |
+
+Les factures SONEB/SBEE ont un montant variable validé côté serveur (500 à 1 000 000 FCFA) ; les autres services ont un tarif fixe. La commission de confort reste affichée séparément. Le catalogue est défini dans `apps/api/prisma/seed.ts` : ajouter un service revient à ajouter une entrée puis à relancer `npm run db:seed`.
+
 ## API
 
 | Méthode | Route                           | Auth | Description                                    |

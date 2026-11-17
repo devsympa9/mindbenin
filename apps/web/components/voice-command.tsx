@@ -30,7 +30,7 @@ const COMMANDS = [
   {
     slug: "acte-naissance",
     label: "Acte de naissance",
-    keywords: ["acte", "naissance", "extrait", "mairie"],
+    keywords: ["naissance", "extrait", "mairie"],
   },
   {
     slug: "casier-judiciaire",
@@ -61,6 +61,26 @@ const COMMANDS = [
     slug: "facture-sbee",
     label: "Facture SBEE",
     keywords: ["sbee", "electricite", "courant", "facture electricite"],
+  },
+  {
+    slug: "acte-celibat",
+    label: "Acte de célibat",
+    keywords: ["celibat", "celibataire", "certificat de celibat", "acte de celibat"],
+  },
+  {
+    slug: "attestation-residence",
+    label: "Attestation de résidence",
+    keywords: ["residence", "attestation de residence", "domicile", "justificatif de domicile"],
+  },
+  {
+    slug: "cnss-cotisation",
+    label: "Cotisation CNSS",
+    keywords: ["cnss", "cotisation", "securite sociale", "cotisations"],
+  },
+  {
+    slug: "pension-retraite",
+    label: "Pension retraite",
+    keywords: ["pension", "retraite", "retraite cnss"],
   },
 ] as const
 
@@ -340,7 +360,7 @@ export function VoiceCommand() {
         )
       } else if (finalTranscript.trim()) {
         setMessage(
-          "Je n'ai pas reconnu. Essaie « passeport », « TVM », « visite technique » ou « facture SONEB ».",
+          "Je n'ai pas reconnu. Essaie « passeport », « TVM », « visite technique », « facture SONEB », « acte de célibat » ou « cotisation CNSS ».",
         )
       }
     }
@@ -365,7 +385,7 @@ export function VoiceCommand() {
 
     if (!command) {
       setMessage(
-        "Je n'ai pas reconnu. Essaie « passeport », « TVM », « visite technique » ou « facture SONEB ».",
+        "Je n'ai pas reconnu. Essaie « passeport », « TVM », « visite technique », « facture SONEB », « acte de célibat » ou « cotisation CNSS ».",
       )
       return
     }

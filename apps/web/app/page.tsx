@@ -84,7 +84,7 @@ const PHASES = [
   {
     label: "Phase 1 · MVP",
     title: "La démo",
-    description: "Scan facial réel, paiement simulé. 8 services, un parcours complet.",
+    description: "Scan facial réel, paiement simulé. 12 services, un parcours complet.",
     state: "Aujourd'hui",
   },
   {
@@ -142,9 +142,10 @@ export default function LandingPage() {
               </h1>
 
               <p className="mt-5 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-                Passeport, acte de naissance, casier judiciaire, impôts, TVM, visite technique,
-                factures SONEB et SBEE. MindBenin remplit le formulaire avec ton NPI, paie les frais
-                et suit ton dossier. Tu ne fais plus la queue : tu viens récupérer.
+                Passeport, acte de naissance, casier judiciaire, acte de célibat, attestation de
+                résidence, impôts, TVM, visite technique, factures SONEB et SBEE, cotisations CNSS et
+                pension de retraite. MindBenin remplit le formulaire avec ton NPI, paie les frais et
+                suit ton dossier. Tu ne fais plus la queue : tu viens récupérer.
               </p>
 
               <div className="mt-7 flex flex-wrap gap-3">

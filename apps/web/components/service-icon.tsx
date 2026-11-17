@@ -2,11 +2,15 @@ import {
   IconBolt,
   IconCar,
   IconCertificate,
+  IconCoins,
   IconDroplet,
   IconFileText,
   IconGavel,
+  IconHeart,
+  IconHome,
   IconReceipt2,
   IconTool,
+  IconWallet,
   type IconProps,
 } from "@tabler/icons-react"
 
@@ -19,6 +23,10 @@ const ICONS: Record<string, React.ComponentType<IconProps>> = {
   tool: IconTool,
   droplet: IconDroplet,
   bolt: IconBolt,
+  heart: IconHeart,
+  home: IconHome,
+  coins: IconCoins,
+  wallet: IconWallet,
 }
 
 export function ServiceIcon({
